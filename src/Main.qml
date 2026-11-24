@@ -86,7 +86,16 @@ ApplicationWindow {
                 // Group 1: Document Context & Sidebar
                 RowLayout {
                     spacing: 8
-                    Layout.maximumWidth: 280
+                    Layout.maximumWidth: 320
+
+                    // Open Document Button
+                    IconButton {
+                        iconSource: "qrc:/icons/folder.svg"
+                        text: qsTr("Open")
+                        highlighted: !backend.hasDocument
+                        tooltipText: qsTr("Open File (Ctrl+O)")
+                        onClicked: backend.openPortal()
+                    }
 
                     IconButton {
                         iconSource: "qrc:/icons/sidebar.svg"
@@ -311,15 +320,6 @@ ApplicationWindow {
                                 onTriggered: Qt.quit()
                             }
                         }
-                    }
-
-                    // Open Document Button
-                    IconButton {
-                        iconSource: "qrc:/icons/folder.svg"
-                        text: qsTr("Open")
-                        highlighted: !backend.hasDocument
-                        tooltipText: qsTr("Open File (Ctrl+O)")
-                        onClicked: backend.openPortal()
                     }
                 }
             }

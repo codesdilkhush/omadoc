@@ -221,22 +221,27 @@ ApplicationWindow {
                             Layout.rightMargin: 4
                         }
 
-                        // Fit to Width
+                        // Unified Fit Toggle (Fit to Width / Fit to Page)
                         IconButton {
-                            iconSource: "qrc:/icons/fit-width.svg"
+                            iconSource: backend.fitMode === 1 ? "qrc:/icons/fit-page.svg" : "qrc:/icons/fit-width.svg"
                             iconSize: 14
-                            active: backend.fitMode === 1
-                            tooltipText: qsTr("Fit to Width (W)")
-                            onClicked: backend.fitToWidth(flickable.width)
+                            active: backend.fitMode !== 0
+                            tooltipText: backend.fitMode === 1 ? qsTr("Fit to Page (P)") : qsTr("Fit to Width (W)")
+                            onClicked: {
+                                if (backend.fitMode === 1) {
+                                    backend.fitToPage(flickable.width, flickable.height);
+                                } else {
+                                    backend.fitToWidth(flickable.width);
+                                }
+                            }
                         }
 
-                        // Fit to Page
+                        // Rotate in Center Island
                         IconButton {
-                            iconSource: "qrc:/icons/fit-page.svg"
+                            iconSource: "qrc:/icons/rotate.svg"
                             iconSize: 14
-                            active: backend.fitMode === 2
-                            tooltipText: qsTr("Fit to Page (P)")
-                            onClicked: backend.fitToPage(flickable.width, flickable.height)
+                            tooltipText: qsTr("Rotate 90° (R)")
+                            onClicked: backend.rotateClockwise()
                         }
                     }
                 }
@@ -257,14 +262,6 @@ ApplicationWindow {
                             if (floatingSearch.visible) floatingSearch.closeSearch();
                             else floatingSearch.openSearch();
                         }
-                    }
-
-                    // Rotate
-                    IconButton {
-                        iconSource: "qrc:/icons/rotate.svg"
-                        visible: backend.hasDocument
-                        tooltipText: qsTr("Rotate 90° (R)")
-                        onClicked: backend.rotateClockwise()
                     }
 
                     // Night Mode

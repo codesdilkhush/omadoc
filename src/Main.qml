@@ -88,15 +88,6 @@ ApplicationWindow {
                     spacing: 8
                     Layout.maximumWidth: 320
 
-                    // Open Document Button
-                    IconButton {
-                        iconSource: "qrc:/icons/folder.svg"
-                        text: qsTr("Open")
-                        highlighted: !backend.hasDocument
-                        tooltipText: qsTr("Open File (Ctrl+O)")
-                        onClicked: backend.openPortal()
-                    }
-
                     IconButton {
                         iconSource: "qrc:/icons/sidebar.svg"
                         tooltipText: qsTr("Table of Contents (T)")
@@ -296,13 +287,8 @@ ApplicationWindow {
                             Material.theme: Material.Dark
 
                             MenuItem {
-                                text: qsTr("Keyboard Shortcuts (?)")
-                                onTriggered: backend.toggleHelp()
-                            }
-                            MenuItem {
-                                text: qsTr("Rotate Clockwise (R)")
-                                enabled: backend.hasDocument
-                                onTriggered: backend.rotateClockwise()
+                                text: qsTr("Open Document (Ctrl+O)")
+                                onTriggered: backend.openPortal()
                             }
                             MenuItem {
                                 text: qsTr("Reset Zoom (0)")
@@ -310,6 +296,10 @@ ApplicationWindow {
                                 onTriggered: backend.resetZoom()
                             }
                             MenuSeparator {}
+                            MenuItem {
+                                text: qsTr("Keyboard Shortcuts (?)")
+                                onTriggered: backend.toggleHelp()
+                            }
                             MenuItem {
                                 text: qsTr("Close Document")
                                 enabled: backend.hasDocument

@@ -31,9 +31,20 @@ ApplicationWindow {
         onClicked: zoomInput.commitZoom()
     }
 
+    property string activeAnnotationColor: "#ffe082"
+    readonly property bool isNoteEditorActive: typeof activeNoteDialog !== "undefined" && activeNoteDialog.visible
+
     // Check if user is typing in a text input field to avoid intercepting keystrokes
     readonly property bool isInputActive: (typeof zoomInput !== "undefined" && zoomInput.activeFocus) ||
-                                          (typeof searchField !== "undefined" && searchField.activeFocus)
+                                          (typeof searchField !== "undefined" && searchField.activeFocus) ||
+                                          isNoteEditorActive
+
+    readonly property var currentPageAnnots: {
+        backend.currentPage;
+        backend.rotation;
+        backend.annotations;
+        return backend.pageAnnotations(backend.currentPage);
+    }
 
     // Application Shortcuts
     Shortcut { sequence: "Q"; enabled: !isInputActive; context: Qt.ApplicationShortcut; onActivated: Qt.quit() }
@@ -45,6 +56,9 @@ ApplicationWindow {
     Shortcut { sequence: "D"; enabled: !isInputActive; context: Qt.ApplicationShortcut; onActivated: backend.toggleDarkMode() }
     Shortcut { sequence: "R"; enabled: !isInputActive; context: Qt.ApplicationShortcut; onActivated: backend.rotateClockwise() }
     Shortcut { sequence: "Shift+R"; enabled: !isInputActive; context: Qt.ApplicationShortcut; onActivated: backend.rotateCounterClockwise() }
+    Shortcut { sequence: "H"; enabled: !isInputActive; context: Qt.ApplicationShortcut; onActivated: backend.activeTool = (backend.activeTool === 1 ? 0 : 1) }
+    Shortcut { sequence: "S"; enabled: !isInputActive; context: Qt.ApplicationShortcut; onActivated: backend.activeTool = (backend.activeTool === 2 ? 0 : 2) }
+    Shortcut { sequence: "V"; enabled: !isInputActive; context: Qt.ApplicationShortcut; onActivated: backend.activeTool = 0 }
     Shortcut { sequence: "T"; enabled: !isInputActive; context: Qt.ApplicationShortcut; onActivated: backend.toggleToc() }
     Shortcut { sequence: "W"; enabled: !isInputActive; context: Qt.ApplicationShortcut; onActivated: backend.fitToWidth(flickable.width) }
     Shortcut { sequence: "P"; enabled: !isInputActive; context: Qt.ApplicationShortcut; onActivated: backend.fitToPage(flickable.width, flickable.height) }
@@ -76,8 +90,10 @@ ApplicationWindow {
         sequence: "Escape"
         context: Qt.ApplicationShortcut
         onActivated: {
-            if (backend.helpVisible) backend.helpVisible = false;
+            if (typeof activeNoteDialog !== "undefined" && activeNoteDialog.visible) activeNoteDialog.closeNote();
+            else if (backend.helpVisible) backend.helpVisible = false;
             else if (floatingSearch.visible) floatingSearch.closeSearch();
+            else if (backend.activeTool !== 0) backend.activeTool = 0;
         }
     }
 
@@ -361,6 +377,69 @@ ApplicationWindow {
                             tooltipText: qsTr("Rotate Clockwise (R)")
                             onClicked: backend.rotateClockwise()
                         }
+
+                        // Divider Line
+                        Rectangle {
+                            width: 1
+                            height: 16
+                            color: "#272a38"
+                            Layout.leftMargin: 4
+                            Layout.rightMargin: 4
+                        }
+
+                        // Pan / Select Tool
+                        IconButton {
+                            iconSource: "qrc:/icons/pointer.svg"
+                            iconSize: 13
+                            active: backend.activeTool === 0
+                            tooltipText: qsTr("Pan / Select (V)")
+                            onClicked: backend.activeTool = 0
+                        }
+
+                        // Highlighter Tool
+                        IconButton {
+                            iconSource: "qrc:/icons/highlighter.svg"
+                            iconSize: 14
+                            active: backend.activeTool === 1
+                            tooltipText: qsTr("Highlight Area (H)")
+                            onClicked: backend.activeTool = (backend.activeTool === 1 ? 0 : 1)
+                        }
+
+                        // Sticky Note Tool
+                        IconButton {
+                            iconSource: "qrc:/icons/sticky-note.svg"
+                            iconSize: 14
+                            active: backend.activeTool === 2
+                            tooltipText: qsTr("Sticky Note (S)")
+                            onClicked: backend.activeTool = (backend.activeTool === 2 ? 0 : 2)
+                        }
+
+                        // Color Presets for Active Tool
+                        Row {
+                            visible: backend.activeTool !== 0
+                            spacing: 4
+                            anchors.verticalCenter: parent.verticalCenter
+                            Layout.leftMargin: 4
+                            Layout.rightMargin: 4
+
+                            Repeater {
+                                model: ["#ffe082", "#80deea", "#81c784", "#ff8a65", "#ce93d8"]
+                                delegate: Rectangle {
+                                    width: 14
+                                    height: 14
+                                    radius: 7
+                                    color: modelData
+                                    border.color: win.activeAnnotationColor === modelData ? "#ffffff" : "#00000040"
+                                    border.width: win.activeAnnotationColor === modelData ? 2 : 1
+
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: win.activeAnnotationColor = modelData
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -416,6 +495,17 @@ ApplicationWindow {
                                 text: qsTr("Save As... (Ctrl+Shift+S)")
                                 enabled: backend.hasDocument
                                 onTriggered: backend.saveAsDocument()
+                            }
+                            MenuSeparator {}
+                            MenuItem {
+                                text: qsTr("Clear Page Annotations")
+                                enabled: backend.hasDocument && win.currentPageAnnots.length > 0
+                                onTriggered: backend.clearAnnotationsForPage(backend.currentPage)
+                            }
+                            MenuItem {
+                                text: qsTr("Clear All Annotations")
+                                enabled: backend.hasDocument && backend.annotationCount > 0
+                                onTriggered: backend.clearAllAnnotations()
                             }
                             MenuSeparator {}
                             MenuItem {
@@ -782,6 +872,378 @@ ApplicationWindow {
                                     running: docImage.status === Image.Loading && !docImage.paintedWidth
                                 }
                             }
+
+                            // Layer 1: Render Highlights
+                            Repeater {
+                                model: win.currentPageAnnots
+                                delegate: Item {
+                                    id: hlItem
+                                    visible: modelData.type === "highlight"
+                                    x: Math.round(modelData.x * pagePaper.width)
+                                    y: Math.round(modelData.y * pagePaper.height)
+                                    width: Math.max(3, Math.round(modelData.width * pagePaper.width))
+                                    height: Math.max(3, Math.round(modelData.height * pagePaper.height))
+                                    z: 15
+
+                                    Rectangle {
+                                        anchors.fill: parent
+                                        color: modelData.color || "#ffe082"
+                                        opacity: hlHover.hovered ? 0.60 : 0.40
+                                        radius: 2
+                                        border.color: hlHover.hovered ? (modelData.color || "#ffe082") : "transparent"
+                                        border.width: 1
+
+                                        Behavior on opacity { NumberAnimation { duration: 100 } }
+                                    }
+
+                                    HoverHandler {
+                                        id: hlHover
+                                    }
+
+                                    // Small delete button on hover
+                                    Rectangle {
+                                        visible: hlHover.hovered
+                                        anchors.top: parent.top
+                                        anchors.right: parent.right
+                                        anchors.topMargin: -8
+                                        anchors.rightMargin: -8
+                                        width: 18
+                                        height: 18
+                                        radius: 9
+                                        color: "#161823"
+                                        border.color: "#3f4459"
+                                        border.width: 1
+                                        z: 35
+
+                                        Image {
+                                            anchors.centerIn: parent
+                                            source: "qrc:/icons/trash.svg"
+                                            width: 10
+                                            height: 10
+                                        }
+
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: backend.deleteAnnotation(modelData.id)
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Layer 2: Render Sticky Note Pins
+                            Repeater {
+                                model: win.currentPageAnnots
+                                delegate: Item {
+                                    id: notePinItem
+                                    visible: modelData.type === "sticky"
+                                    x: Math.round(modelData.x * pagePaper.width) - 14
+                                    y: Math.round(modelData.y * pagePaper.height) - 14
+                                    width: 28
+                                    height: 28
+                                    z: 35
+
+                                    Rectangle {
+                                        anchors.fill: parent
+                                        radius: 14
+                                        color: modelData.color || "#ffd54f"
+                                        border.color: notePinHover.hovered ? "#ffffff" : "#00000040"
+                                        border.width: 1.5
+
+                                        Image {
+                                            anchors.centerIn: parent
+                                            source: "qrc:/icons/sticky-note.svg"
+                                            width: 14
+                                            height: 14
+                                        }
+
+                                        HoverHandler {
+                                            id: notePinHover
+                                        }
+
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: activeNoteDialog.openForExistingNote(modelData)
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Layer 3: Drag Highlight Selection Preview
+                            Rectangle {
+                                id: dragHighlightPreview
+                                visible: paperAnnotArea.isDrawing && backend.activeTool === 1
+                                x: Math.min(paperAnnotArea.startX, paperAnnotArea.currentX)
+                                y: Math.min(paperAnnotArea.startY, paperAnnotArea.currentY)
+                                width: Math.abs(paperAnnotArea.currentX - paperAnnotArea.startX)
+                                height: Math.abs(paperAnnotArea.currentY - paperAnnotArea.startY)
+                                color: win.activeAnnotationColor
+                                opacity: 0.35
+                                border.color: win.activeAnnotationColor
+                                border.width: 1.5
+                                radius: 2
+                                z: 25
+                            }
+
+                            // Layer 4: Annotation Interaction MouseArea
+                            MouseArea {
+                                id: paperAnnotArea
+                                anchors.fill: parent
+                                z: 20
+                                enabled: backend.hasDocument && backend.activeTool !== 0
+                                cursorShape: backend.activeTool === 1 ? Qt.CrossCursor : Qt.PointingHandCursor
+                                hoverEnabled: true
+
+                                property real startX: 0
+                                property real startY: 0
+                                property real currentX: 0
+                                property real currentY: 0
+                                property bool isDrawing: false
+
+                                onPressed: (mouse) => {
+                                    if (activeNoteDialog.visible) {
+                                        activeNoteDialog.closeNote();
+                                    }
+                                    if (backend.activeTool === 1) {
+                                        startX = mouse.x;
+                                        startY = mouse.y;
+                                        currentX = mouse.x;
+                                        currentY = mouse.y;
+                                        isDrawing = true;
+                                    }
+                                }
+
+                                onPositionChanged: (mouse) => {
+                                    if (isDrawing) {
+                                        currentX = mouse.x;
+                                        currentY = mouse.y;
+                                    }
+                                }
+
+                                onReleased: (mouse) => {
+                                    if (isDrawing && backend.activeTool === 1) {
+                                        isDrawing = false;
+                                        var w = currentX - startX;
+                                        var h = currentY - startY;
+                                        if (Math.abs(w) > 4 && Math.abs(h) > 4 && pagePaper.width > 0 && pagePaper.height > 0) {
+                                            var rx = Math.min(startX, currentX) / pagePaper.width;
+                                            var ry = Math.min(startY, currentY) / pagePaper.height;
+                                            var rw = Math.abs(w) / pagePaper.width;
+                                            var rh = Math.abs(h) / pagePaper.height;
+                                            backend.addHighlight(backend.currentPage, rx, ry, rw, rh, win.activeAnnotationColor);
+                                        }
+                                    }
+                                }
+
+                                onClicked: (mouse) => {
+                                    if (backend.activeTool === 2) {
+                                        var nx = mouse.x / pagePaper.width;
+                                        var ny = mouse.y / pagePaper.height;
+                                        var noteId = backend.addStickyNote(backend.currentPage, nx, ny, "", win.activeAnnotationColor);
+                                        activeNoteDialog.openForNewNote(noteId, mouse.x, mouse.y);
+                                    }
+                                }
+                            }
+
+                            // Layer 5: Active Sticky Note Card Dialog
+                            Rectangle {
+                                id: activeNoteDialog
+                                visible: false
+                                z: 100
+                                width: 280
+                                height: 210
+                                radius: 8
+                                color: "#181a24"
+                                border.color: "#2f3348"
+                                border.width: 1
+
+                                property string currentNoteId: ""
+                                property string currentNoteColor: "#ffd54f"
+
+                                function openForNewNote(id, clickX, clickY) {
+                                    currentNoteId = id;
+                                    currentNoteColor = win.activeAnnotationColor;
+                                    noteEditorArea.text = "";
+                                    positionAt(clickX, clickY);
+                                    visible = true;
+                                    noteEditorArea.forceActiveFocus();
+                                }
+
+                                function openForExistingNote(noteData) {
+                                    currentNoteId = noteData.id;
+                                    currentNoteColor = noteData.color || "#ffd54f";
+                                    noteEditorArea.text = noteData.content || "";
+                                    var px = Math.round(noteData.x * pagePaper.width);
+                                    var py = Math.round(noteData.y * pagePaper.height);
+                                    positionAt(px, py);
+                                    visible = true;
+                                    noteEditorArea.forceActiveFocus();
+                                }
+
+                                function positionAt(px, py) {
+                                    var targetX = px + 14;
+                                    var targetY = py + 14;
+                                    if (targetX + width > pagePaper.width) targetX = Math.max(8, px - width - 14);
+                                    if (targetY + height > pagePaper.height) targetY = Math.max(8, py - height - 14);
+                                    x = Math.max(8, Math.min(targetX, Math.max(8, pagePaper.width - width - 8)));
+                                    y = Math.max(8, Math.min(targetY, Math.max(8, pagePaper.height - height - 8)));
+                                }
+
+                                function closeNote() {
+                                    if (currentNoteId.length > 0) {
+                                        backend.updateStickyNote(currentNoteId, noteEditorArea.text);
+                                    }
+                                    visible = false;
+                                    currentNoteId = "";
+                                    windowFocusTarget.forceActiveFocus();
+                                }
+
+                                function deleteCurrentNote() {
+                                    if (currentNoteId.length > 0) {
+                                        backend.deleteAnnotation(currentNoteId);
+                                    }
+                                    visible = false;
+                                    currentNoteId = "";
+                                    windowFocusTarget.forceActiveFocus();
+                                }
+
+                                // Top color accent strip
+                                Rectangle {
+                                    id: noteAccentStrip
+                                    anchors.top: parent.top
+                                    anchors.left: parent.left
+                                    anchors.right: parent.right
+                                    height: 4
+                                    radius: 2
+                                    color: activeNoteDialog.currentNoteColor
+                                }
+
+                                ColumnLayout {
+                                    anchors.fill: parent
+                                    anchors.topMargin: 8
+                                    anchors.bottomMargin: 8
+                                    anchors.leftMargin: 10
+                                    anchors.rightMargin: 10
+                                    spacing: 6
+
+                                    // Dialog Header
+                                    RowLayout {
+                                        Layout.fillWidth: true
+
+                                        Image {
+                                            source: "qrc:/icons/sticky-note.svg"
+                                            width: 13
+                                            height: 13
+                                        }
+
+                                        Text {
+                                            text: qsTr("Sticky Note")
+                                            font.pixelSize: 11
+                                            font.weight: Font.Bold
+                                            color: "#b0b5c4"
+                                            Layout.fillWidth: true
+                                        }
+
+                                        // Delete Note Button
+                                        IconButton {
+                                            iconSource: "qrc:/icons/trash.svg"
+                                            iconSize: 12
+                                            implicitWidth: 22
+                                            implicitHeight: 22
+                                            tooltipText: qsTr("Delete Note")
+                                            onClicked: activeNoteDialog.deleteCurrentNote()
+                                        }
+
+                                        // Close Note Button
+                                        IconButton {
+                                            iconSource: "qrc:/icons/close.svg"
+                                            iconSize: 12
+                                            implicitWidth: 22
+                                            implicitHeight: 22
+                                            tooltipText: qsTr("Done / Close")
+                                            onClicked: activeNoteDialog.closeNote()
+                                        }
+                                    }
+
+                                    // Note Text Area
+                                    Rectangle {
+                                        Layout.fillWidth: true
+                                        Layout.fillHeight: true
+                                        color: "#12141c"
+                                        radius: 4
+                                        border.color: noteEditorArea.activeFocus ? theme.accent : "#222533"
+                                        border.width: 1
+
+                                        Flickable {
+                                            id: noteFlickable
+                                            anchors.fill: parent
+                                            anchors.margins: 6
+                                            contentWidth: width
+                                            contentHeight: noteEditorArea.implicitHeight
+                                            clip: true
+
+                                            TextArea.flickable: TextArea {
+                                                id: noteEditorArea
+                                                font.pixelSize: 12
+                                                color: "#ffffff"
+                                                wrapMode: TextEdit.Wrap
+                                                selectByMouse: true
+                                                placeholderText: qsTr("Write note here...")
+                                                placeholderTextColor: "#555b6e"
+                                                background: Item {}
+                                                onTextChanged: {
+                                                    if (activeNoteDialog.currentNoteId.length > 0) {
+                                                        backend.updateStickyNote(activeNoteDialog.currentNoteId, text);
+                                                    }
+                                                }
+                                            }
+
+                                            ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+                                        }
+                                    }
+
+                                    // Footer with Color Picker and Done button
+                                    RowLayout {
+                                        Layout.fillWidth: true
+
+                                        Row {
+                                            spacing: 4
+                                            Repeater {
+                                                model: ["#ffd54f", "#80deea", "#81c784", "#ff8a65", "#ce93d8"]
+                                                delegate: Rectangle {
+                                                    width: 14
+                                                    height: 14
+                                                    radius: 7
+                                                    color: modelData
+                                                    border.color: activeNoteDialog.currentNoteColor === modelData ? "#ffffff" : "#00000040"
+                                                    border.width: activeNoteDialog.currentNoteColor === modelData ? 2 : 1
+
+                                                    MouseArea {
+                                                        anchors.fill: parent
+                                                        cursorShape: Qt.PointingHandCursor
+                                                        onClicked: {
+                                                            activeNoteDialog.currentNoteColor = modelData;
+                                                            win.activeAnnotationColor = modelData;
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        Item { Layout.fillWidth: true }
+
+                                        Button {
+                                            text: qsTr("Done")
+                                            flat: true
+                                            font.pixelSize: 11
+                                            implicitHeight: 24
+                                            implicitWidth: 50
+                                            onClicked: activeNoteDialog.closeNote()
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -1046,11 +1508,23 @@ ApplicationWindow {
                         spacing: 10
 
                         Text {
-                            text: qsTr("DOCUMENT & SEARCH")
+                            text: qsTr("DOCUMENT & ANNOTATIONS")
                             font.pixelSize: 10
                             font.weight: Font.Bold
                             color: theme.accent
                             font.letterSpacing: 0.5
+                        }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            Row {
+                                spacing: 4
+                                KeyBadge { text: "H" }
+                                KeyBadge { text: "S" }
+                                KeyBadge { text: "V" }
+                            }
+                            Item { Layout.fillWidth: true }
+                            Text { text: qsTr("Highlight / Note / Pan"); color: "#d1d5db"; font.pixelSize: 12 }
                         }
 
                         RowLayout {

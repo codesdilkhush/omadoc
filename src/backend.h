@@ -32,6 +32,9 @@ class Backend : public QObject {
     Q_PROPERTY(int revision READ revision NOTIFY revisionChanged)
     Q_PROPERTY(QStringList recentFiles READ recentFiles NOTIFY recentFilesChanged)
     Q_PROPERTY(int fitMode READ fitMode WRITE setFitMode NOTIFY fitModeChanged)
+    Q_PROPERTY(int activeTool READ activeTool WRITE setActiveTool NOTIFY activeToolChanged)
+    Q_PROPERTY(QVariantList annotations READ annotations NOTIFY annotationsChanged)
+    Q_PROPERTY(int annotationCount READ annotationCount NOTIFY annotationsChanged)
 
 public:
     explicit Backend(DocumentEngine *engine, PageImageProvider *provider, QObject *parent = nullptr);
@@ -54,6 +57,20 @@ public:
 
     int fitMode() const { return m_fitMode; }
     void setFitMode(int mode);
+
+    int activeTool() const { return m_activeTool; }
+    void setActiveTool(int tool);
+
+    QVariantList annotations() const { return m_annotations; }
+    int annotationCount() const { return m_annotations.size(); }
+    Q_INVOKABLE QVariantList pageAnnotations(int pageIndex) const;
+
+    Q_INVOKABLE void addHighlight(int page, double x, double y, double width, double height, const QString &color = QString());
+    Q_INVOKABLE QString addStickyNote(int page, double x, double y, const QString &content = QString(), const QString &color = QString());
+    Q_INVOKABLE void updateStickyNote(const QString &id, const QString &content);
+    Q_INVOKABLE void deleteAnnotation(const QString &id);
+    Q_INVOKABLE void clearAnnotationsForPage(int page);
+    Q_INVOKABLE void clearAllAnnotations();
 
     bool hasDocument() const;
     QVariantList toc() const { return m_toc; }
@@ -110,6 +127,8 @@ signals:
     void darkModeChanged();
     void rotationChanged();
     void fitModeChanged();
+    void activeToolChanged();
+    void annotationsChanged();
     void tocChanged();
     void tocVisibleChanged();
     void helpVisibleChanged();
@@ -121,6 +140,9 @@ private:
     void addRecentFile(const QString &path);
     void loadRecents();
     void saveRecents();
+    void loadAnnotations();
+    void saveAnnotations();
+    QString annotationFilePath() const;
 
     DocumentEngine *m_engine;
     PageImageProvider *m_provider;
@@ -131,11 +153,13 @@ private:
     bool m_darkMode = false;
     int m_rotation = 0;
     int m_fitMode = 0; // 0 = Free, 1 = FitWidth, 2 = FitPage
+    int m_activeTool = 0; // 0 = Select/Pan, 1 = Highlight, 2 = Sticky Note
     bool m_tocVisible = false;
     bool m_helpVisible = false;
     int m_revision = 0;
 
     QStringList m_recentFiles;
+    QVariantList m_annotations;
     QVariantList m_toc;
     QString m_searchQuery;
     QList<int> m_searchResults;

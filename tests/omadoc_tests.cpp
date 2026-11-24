@@ -192,6 +192,58 @@ private slots:
         QVERIFY(reloadedEngine.load(pdfPath));
         QCOMPARE(reloadedEngine.pageCount(), 2);
 
+        // Test annotations (Highlighting & Sticky Notes)
+        QCOMPARE(backend.annotationCount(), 0);
+        backend.setActiveTool(1);
+        QCOMPARE(backend.activeTool(), 1);
+
+        backend.addHighlight(0, 0.1, 0.2, 0.3, 0.05, "#ffe082");
+        QCOMPARE(backend.annotationCount(), 1);
+        QCOMPARE(backend.pageAnnotations(0).size(), 1);
+        QCOMPARE(backend.pageAnnotations(1).size(), 0);
+
+        const QVariantMap hlMap = backend.pageAnnotations(0).first().toMap();
+        QCOMPARE(hlMap.value("type").toString(), QStringLiteral("highlight"));
+        QCOMPARE(hlMap.value("color").toString(), QStringLiteral("#ffe082"));
+        QVERIFY(std::abs(hlMap.value("x").toDouble() - 0.1) < 0.001);
+        QVERIFY(std::abs(hlMap.value("y").toDouble() - 0.2) < 0.001);
+
+        // Add sticky note
+        const QString noteId = backend.addStickyNote(0, 0.5, 0.6, "Important comment", "#ffd54f");
+        QVERIFY(!noteId.isEmpty());
+        QCOMPARE(backend.annotationCount(), 2);
+        QCOMPARE(backend.pageAnnotations(0).size(), 2);
+
+        // Update sticky note
+        backend.updateStickyNote(noteId, "Updated comment content");
+        bool foundUpdated = false;
+        for (const QVariant &annot : backend.pageAnnotations(0)) {
+            const QVariantMap m = annot.toMap();
+            if (m.value("id").toString() == noteId) {
+                QCOMPARE(m.value("content").toString(), QStringLiteral("Updated comment content"));
+                foundUpdated = true;
+            }
+        }
+        QVERIFY(foundUpdated);
+
+        // Test rotation transformation
+        backend.setRotation(90);
+        const QVariantList rotAnnots = backend.pageAnnotations(0);
+        QCOMPARE(rotAnnots.size(), 2);
+        backend.setRotation(0);
+
+        // Delete sticky note
+        backend.deleteAnnotation(noteId);
+        QCOMPARE(backend.annotationCount(), 1);
+
+        // Test persistence: re-open file should reload highlight
+        backend.openFile(pdfPath);
+        QCOMPARE(backend.annotationCount(), 1);
+
+        // Clear all annotations
+        backend.clearAllAnnotations();
+        QCOMPARE(backend.annotationCount(), 0);
+
         backend.closeDocument();
         QCOMPARE(backend.hasDocument(), false);
     }

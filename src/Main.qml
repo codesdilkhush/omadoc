@@ -35,6 +35,7 @@ ApplicationWindow {
     Shortcut { sequences: [StandardKey.SaveAs]; context: Qt.ApplicationShortcut; onActivated: backend.saveAsDocument() }
     Shortcut { sequence: "D"; enabled: !isInputActive; context: Qt.ApplicationShortcut; onActivated: backend.toggleDarkMode() }
     Shortcut { sequence: "R"; enabled: !isInputActive; context: Qt.ApplicationShortcut; onActivated: backend.rotateClockwise() }
+    Shortcut { sequence: "Shift+R"; enabled: !isInputActive; context: Qt.ApplicationShortcut; onActivated: backend.rotateCounterClockwise() }
     Shortcut { sequence: "T"; enabled: !isInputActive; context: Qt.ApplicationShortcut; onActivated: backend.toggleToc() }
     Shortcut { sequence: "W"; enabled: !isInputActive; context: Qt.ApplicationShortcut; onActivated: backend.fitToWidth(flickable.width) }
     Shortcut { sequence: "P"; enabled: !isInputActive; context: Qt.ApplicationShortcut; onActivated: backend.fitToPage(flickable.width, flickable.height) }
@@ -337,11 +338,19 @@ ApplicationWindow {
                             }
                         }
 
-                        // Rotate in Center Island
+                        // Rotate Anti-Clockwise
+                        IconButton {
+                            iconSource: "qrc:/icons/rotate-left.svg"
+                            iconSize: 14
+                            tooltipText: qsTr("Rotate Anti-Clockwise (Shift+R)")
+                            onClicked: backend.rotateCounterClockwise()
+                        }
+
+                        // Rotate Clockwise
                         IconButton {
                             iconSource: "qrc:/icons/rotate.svg"
                             iconSize: 14
-                            tooltipText: qsTr("Rotate 90° (R)")
+                            tooltipText: qsTr("Rotate Clockwise (R)")
                             onClicked: backend.rotateClockwise()
                         }
                     }
@@ -1036,9 +1045,13 @@ ApplicationWindow {
 
                         RowLayout {
                             Layout.fillWidth: true
-                            KeyBadge { text: "R" }
+                            Row {
+                                spacing: 4
+                                KeyBadge { text: "R" }
+                                KeyBadge { text: "Shift+R" }
+                            }
                             Item { Layout.fillWidth: true }
-                            Text { text: qsTr("Rotate 90° clockwise"); color: "#d1d5db"; font.pixelSize: 12 }
+                            Text { text: qsTr("Rotate CW / CCW"); color: "#d1d5db"; font.pixelSize: 12 }
                         }
 
                         RowLayout {

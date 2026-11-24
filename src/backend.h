@@ -90,6 +90,7 @@ public:
 
     Q_INVOKABLE void toggleDarkMode();
     Q_INVOKABLE void rotateClockwise();
+    Q_INVOKABLE void rotateCounterClockwise();
     Q_INVOKABLE void toggleToc();
     Q_INVOKABLE void toggleHelp();
 

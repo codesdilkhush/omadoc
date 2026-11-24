@@ -68,6 +68,18 @@ private slots:
 
         backend.rotateClockwise();
         QCOMPARE(backend.rotation(), 0);
+
+        backend.rotateCounterClockwise();
+        QCOMPARE(backend.rotation(), 270);
+
+        backend.rotateCounterClockwise();
+        QCOMPARE(backend.rotation(), 180);
+
+        backend.rotateCounterClockwise();
+        QCOMPARE(backend.rotation(), 90);
+
+        backend.rotateCounterClockwise();
+        QCOMPARE(backend.rotation(), 0);
     }
 
     void testThemeFallback() {

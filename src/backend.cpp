@@ -244,6 +244,10 @@ void Backend::rotateClockwise() {
     setRotation(m_rotation + 90);
 }
 
+void Backend::rotateCounterClockwise() {
+    setRotation(m_rotation - 90);
+}
+
 void Backend::toggleToc() {
     setTocVisible(!m_tocVisible);
 }

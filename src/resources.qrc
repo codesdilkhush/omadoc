@@ -14,6 +14,7 @@
         <file alias="icons/fit-width.svg">icons/fit-width.svg</file>
         <file alias="icons/fit-page.svg">icons/fit-page.svg</file>
         <file alias="icons/rotate.svg">icons/rotate.svg</file>
+        <file alias="icons/rotate-left.svg">icons/rotate-left.svg</file>
         <file alias="icons/moon.svg">icons/moon.svg</file>
         <file alias="icons/sun.svg">icons/sun.svg</file>
         <file alias="icons/folder.svg">icons/folder.svg</file>

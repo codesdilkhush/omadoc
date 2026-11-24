@@ -22,6 +22,15 @@ ApplicationWindow {
         focus: true
     }
 
+    // Transparent overlay active ONLY when editing zoomInput, to reliably commit and dismiss on any outside click
+    MouseArea {
+        id: focusDismissOverlay
+        anchors.fill: parent
+        z: 40
+        visible: typeof zoomInput !== "undefined" && zoomInput.activeFocus
+        onClicked: zoomInput.commitZoom()
+    }
+
     // Check if user is typing in a text input field to avoid intercepting keystrokes
     readonly property bool isInputActive: (typeof zoomInput !== "undefined" && zoomInput.activeFocus) ||
                                           (typeof searchField !== "undefined" && searchField.activeFocus)
@@ -82,14 +91,15 @@ ApplicationWindow {
             Layout.fillWidth: true
             height: 48
             color: "#12131a"
+            z: 50
 
             MouseArea {
                 anchors.fill: parent
                 z: -1
-                onPressed: (mouse) => {
-                    zoomInput.focus = false;
-                    flickable.forceActiveFocus();
-                    mouse.accepted = false;
+                onClicked: {
+                    if (zoomInput.activeFocus) {
+                        zoomInput.commitZoom();
+                    }
                 }
             }
 
@@ -256,16 +266,14 @@ ApplicationWindow {
                                             backend.setZoom(val / 100.0);
                                         }
                                         text = Math.round(backend.zoom * 100).toString();
-                                        if (activeFocus) {
-                                            flickable.forceActiveFocus();
-                                        }
+                                        windowFocusTarget.forceActiveFocus();
                                     }
 
                                     onAccepted: commitZoom()
 
                                     Keys.onEscapePressed: {
                                         text = Math.round(backend.zoom * 100).toString();
-                                        flickable.forceActiveFocus();
+                                        windowFocusTarget.forceActiveFocus();
                                     }
 
                                     onActiveFocusChanged: {
@@ -548,16 +556,6 @@ ApplicationWindow {
                     anchors.fill: parent
                     visible: !backend.hasDocument
 
-                    MouseArea {
-                        anchors.fill: parent
-                        z: -1
-                        onPressed: (mouse) => {
-                            zoomInput.focus = false;
-                            flickable.forceActiveFocus();
-                            mouse.accepted = false;
-                        }
-                    }
-
                     ColumnLayout {
                         anchors.centerIn: parent
                         width: Math.min(parent.width - 48, 520)
@@ -730,16 +728,6 @@ ApplicationWindow {
                     clip: true
                     boundsBehavior: Flickable.StopAtBounds
 
-                    MouseArea {
-                        anchors.fill: parent
-                        z: -1
-                        onPressed: (mouse) => {
-                            zoomInput.focus = false;
-                            flickable.forceActiveFocus();
-                            mouse.accepted = false;
-                        }
-                    }
-
                     onWidthChanged: {
                         if (backend.fitMode === 1) backend.fitToWidth(width);
                         else if (backend.fitMode === 2) backend.fitToPage(width, height);
@@ -776,16 +764,6 @@ ApplicationWindow {
                             color: backend.darkMode ? "#12141a" : "#ffffff"
                             border.color: backend.darkMode ? "#2a2d3e" : "#00000030"
                             border.width: 1
-
-                            MouseArea {
-                                anchors.fill: parent
-                                z: -1
-                                onPressed: (mouse) => {
-                                    zoomInput.focus = false;
-                                    flickable.forceActiveFocus();
-                                    mouse.accepted = false;
-                                }
-                            }
 
                             Image {
                                 id: docImage

@@ -54,12 +54,70 @@ void PortalFilePicker::openFile(const QString &title) {
     });
 }
 
+void PortalFilePicker::saveFile(const QString &suggestedName, const QString &title) {
+    if (!QDBusConnection::sessionBus().isConnected()) {
+        emit cancelled();
+        return;
+    }
+
+    const QString token = QStringLiteral("omadoc_save_%1").arg(QRandomGenerator::global()->generate());
+
+    QVariantMap options;
+    options.insert(QStringLiteral("handle_token"), token);
+    if (!suggestedName.isEmpty()) {
+        options.insert(QStringLiteral("current_name"), suggestedName);
+    }
+
+    QDBusMessage request = QDBusMessage::createMethodCall(
+        QStringLiteral("org.freedesktop.portal.Desktop"),
+        QStringLiteral("/org/freedesktop/portal/desktop"),
+        QStringLiteral("org.freedesktop.portal.FileChooser"),
+        QStringLiteral("SaveFile")
+    );
+
+    request << QString() << title << options;
+
+    QDBusPendingCall pcall = QDBusConnection::sessionBus().asyncCall(request);
+    auto *watcher = new QDBusPendingCallWatcher(pcall, this);
+
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher *w) {
+        w->deleteLater();
+        QDBusPendingReply<QDBusObjectPath> reply = *w;
+        if (reply.isError()) {
+            emit cancelled();
+            return;
+        }
+
+        const QString requestPath = reply.value().path();
+        QDBusConnection::sessionBus().connect(
+            QStringLiteral("org.freedesktop.portal.Desktop"),
+            requestPath,
+            QStringLiteral("org.freedesktop.portal.Request"),
+            QStringLiteral("Response"),
+            this,
+            SLOT(onSaveResponse(uint, QVariantMap))
+        );
+    });
+}
+
 void PortalFilePicker::onResponse(uint response, const QVariantMap &results) {
     if (response == 0 && results.contains(QStringLiteral("uris"))) {
         const QStringList uris = results.value(QStringLiteral("uris")).toStringList();
         if (!uris.isEmpty()) {
             QUrl url(uris.first());
             emit fileSelected(url.isLocalFile() ? url.toLocalFile() : uris.first());
+            return;
+        }
+    }
+    emit cancelled();
+}
+
+void PortalFilePicker::onSaveResponse(uint response, const QVariantMap &results) {
+    if (response == 0 && results.contains(QStringLiteral("uris"))) {
+        const QStringList uris = results.value(QStringLiteral("uris")).toStringList();
+        if (!uris.isEmpty()) {
+            QUrl url(uris.first());
+            emit saveTargetSelected(url.isLocalFile() ? url.toLocalFile() : uris.first());
             return;
         }
     }

@@ -36,6 +36,13 @@ void DocumentEngine::close() {
     }
 }
 
+bool DocumentEngine::saveCopy(const QString &targetPath) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    if (!m_doc || targetPath.isEmpty())
+        return false;
+    return m_doc->save_a_copy(targetPath.toStdString());
+}
+
 bool DocumentEngine::isLoaded() const {
     std::lock_guard<std::mutex> lock(m_mutex);
     return m_doc != nullptr;

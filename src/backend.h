@@ -73,6 +73,8 @@ public:
     Q_INVOKABLE void openFile(const QString &path);
     Q_INVOKABLE void openRecent(int index);
     Q_INVOKABLE void openPortal();
+    Q_INVOKABLE void saveDocument();
+    Q_INVOKABLE void saveAsDocument();
     Q_INVOKABLE void closeDocument();
     Q_INVOKABLE void clearRecents();
 

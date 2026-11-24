@@ -12,6 +12,11 @@ Backend::Backend(DocumentEngine *engine, PageImageProvider *provider, QObject *p
     : QObject(parent), m_engine(engine), m_provider(provider) {
     m_picker = new PortalFilePicker(this);
     connect(m_picker, &PortalFilePicker::fileSelected, this, &Backend::openFile);
+    connect(m_picker, &PortalFilePicker::saveTargetSelected, this, [this](const QString &target) {
+        if (m_engine && m_engine->saveCopy(target)) {
+            addRecentFile(target);
+        }
+    });
     loadRecents();
 }
 
@@ -144,6 +149,16 @@ void Backend::openPortal() {
     if (m_picker) {
         m_picker->openFile(QStringLiteral("Open Document"));
     }
+}
+
+void Backend::saveDocument() {
+    if (!hasDocument() || !m_engine) return;
+    m_engine->saveCopy(filePath());
+}
+
+void Backend::saveAsDocument() {
+    if (!hasDocument() || !m_picker) return;
+    m_picker->saveFile(fileName(), QStringLiteral("Save Document As"));
 }
 
 void Backend::closeDocument() {

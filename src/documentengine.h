@@ -23,6 +23,7 @@ public:
 
     bool load(const QString &path);
     void close();
+    bool saveCopy(const QString &targetPath);
 
     bool isLoaded() const;
     QString filePath() const { return m_filePath; }

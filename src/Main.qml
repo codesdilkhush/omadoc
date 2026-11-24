@@ -22,6 +22,8 @@ ApplicationWindow {
     Shortcut { sequence: "?"; context: Qt.ApplicationShortcut; onActivated: backend.toggleHelp() }
     Shortcut { sequence: "O"; context: Qt.ApplicationShortcut; onActivated: backend.openPortal() }
     Shortcut { sequences: [StandardKey.Open]; context: Qt.ApplicationShortcut; onActivated: backend.openPortal() }
+    Shortcut { sequences: [StandardKey.Save]; context: Qt.ApplicationShortcut; onActivated: backend.saveDocument() }
+    Shortcut { sequences: [StandardKey.SaveAs]; context: Qt.ApplicationShortcut; onActivated: backend.saveAsDocument() }
     Shortcut { sequence: "D"; context: Qt.ApplicationShortcut; onActivated: backend.toggleDarkMode() }
     Shortcut { sequence: "R"; context: Qt.ApplicationShortcut; onActivated: backend.rotateClockwise() }
     Shortcut { sequence: "T"; context: Qt.ApplicationShortcut; onActivated: backend.toggleToc() }
@@ -291,9 +293,14 @@ ApplicationWindow {
                                 onTriggered: backend.openPortal()
                             }
                             MenuItem {
-                                text: qsTr("Reset Zoom (0)")
+                                text: qsTr("Save (Ctrl+S)")
                                 enabled: backend.hasDocument
-                                onTriggered: backend.resetZoom()
+                                onTriggered: backend.saveDocument()
+                            }
+                            MenuItem {
+                                text: qsTr("Save As... (Ctrl+Shift+S)")
+                                enabled: backend.hasDocument
+                                onTriggered: backend.saveAsDocument()
                             }
                             MenuSeparator {}
                             MenuItem {

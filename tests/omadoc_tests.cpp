@@ -148,6 +148,11 @@ private slots:
         QVERIFY(!searchRes.isEmpty());
         QCOMPARE(searchRes.first(), 0);
 
+        // Test save copy
+        const QString copyPath = temp.filePath("saved_copy.pdf");
+        QVERIFY(engine.saveCopy(copyPath));
+        QVERIFY(QFile::exists(copyPath));
+
         backend.closeDocument();
         QCOMPARE(backend.hasDocument(), false);
     }

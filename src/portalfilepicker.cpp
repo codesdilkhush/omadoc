@@ -65,7 +65,11 @@ void PortalFilePicker::saveFile(const QString &suggestedName, const QString &tit
     QVariantMap options;
     options.insert(QStringLiteral("handle_token"), token);
     if (!suggestedName.isEmpty()) {
-        options.insert(QStringLiteral("current_name"), suggestedName);
+        QString name = suggestedName;
+        if (!name.endsWith(QStringLiteral(".pdf"), Qt::CaseInsensitive)) {
+            name += QStringLiteral(".pdf");
+        }
+        options.insert(QStringLiteral("current_name"), name);
     }
 
     QDBusMessage request = QDBusMessage::createMethodCall(
@@ -117,7 +121,11 @@ void PortalFilePicker::onSaveResponse(uint response, const QVariantMap &results)
         const QStringList uris = results.value(QStringLiteral("uris")).toStringList();
         if (!uris.isEmpty()) {
             QUrl url(uris.first());
-            emit saveTargetSelected(url.isLocalFile() ? url.toLocalFile() : uris.first());
+            QString path = url.isLocalFile() ? url.toLocalFile() : uris.first();
+            if (!path.endsWith(QStringLiteral(".pdf"), Qt::CaseInsensitive)) {
+                path += QStringLiteral(".pdf");
+            }
+            emit saveTargetSelected(path);
             return;
         }
     }

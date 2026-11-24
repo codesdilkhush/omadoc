@@ -173,10 +173,24 @@ private slots:
         QVERIFY(!searchRes.isEmpty());
         QCOMPARE(searchRes.first(), 0);
 
-        // Test save copy
+        // Test save copy (Save As)
         const QString copyPath = temp.filePath("saved_copy.pdf");
         QVERIFY(engine.saveCopy(copyPath));
         QVERIFY(QFile::exists(copyPath));
+        QVERIFY(QFileInfo(copyPath).size() > 0);
+
+        // Test in-place save (Save / Ctrl+S) without corruption
+        const qint64 origSize = QFileInfo(pdfPath).size();
+        QVERIFY(origSize > 0);
+        QVERIFY(engine.saveCopy(pdfPath));
+        QVERIFY(QFile::exists(pdfPath));
+        QVERIFY(QFileInfo(pdfPath).size() > 0);
+        QCOMPARE(engine.pageCount(), 2);
+
+        // Verify reloaded document from in-place saved file
+        DocumentEngine reloadedEngine;
+        QVERIFY(reloadedEngine.load(pdfPath));
+        QCOMPARE(reloadedEngine.pageCount(), 2);
 
         backend.closeDocument();
         QCOMPARE(backend.hasDocument(), false);

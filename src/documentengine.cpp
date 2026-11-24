@@ -5,6 +5,11 @@
 #include <poppler-page-renderer.h>
 #include <poppler-toc.h>
 
+#include <QFile>
+#include <QFileInfo>
+#include <QDir>
+#include <QRandomGenerator>
+
 #include <functional>
 
 DocumentEngine::DocumentEngine(QObject *parent) : QObject(parent) {}
@@ -40,7 +45,59 @@ bool DocumentEngine::saveCopy(const QString &targetPath) {
     std::lock_guard<std::mutex> lock(m_mutex);
     if (!m_doc || targetPath.isEmpty())
         return false;
-    return m_doc->save_a_copy(targetPath.toStdString());
+
+    const QFileInfo targetInfo(targetPath);
+    QDir dir = targetInfo.absoluteDir();
+    if (!dir.exists()) {
+        dir.mkpath(QStringLiteral("."));
+    }
+
+    // Never write directly over the target file in-place because Poppler keeps
+    // the file handle open. Truncating an in-use file causes immediate corruption.
+    // Instead, save to a temporary file first and then atomically rename.
+    QString tempPath = dir.absoluteFilePath(
+        QStringLiteral(".omadoc_%1_%2.tmp")
+            .arg(QRandomGenerator::global()->generate())
+            .arg(targetInfo.fileName())
+    );
+
+    bool saved = m_doc->save_a_copy(tempPath.toStdString());
+    if (!saved || !QFile::exists(tempPath) || QFileInfo(tempPath).size() == 0) {
+        if (QFile::exists(tempPath)) QFile::remove(tempPath);
+
+        // Fallback: try system temp directory
+        tempPath = QDir::temp().absoluteFilePath(
+            QStringLiteral("omadoc_%1_%2.tmp")
+                .arg(QRandomGenerator::global()->generate())
+                .arg(targetInfo.fileName())
+        );
+        saved = m_doc->save_a_copy(tempPath.toStdString());
+        if (!saved || !QFile::exists(tempPath) || QFileInfo(tempPath).size() == 0) {
+            if (QFile::exists(tempPath)) QFile::remove(tempPath);
+            return false;
+        }
+    }
+
+    const bool isSameAsLoaded = (QFileInfo(m_filePath) == targetInfo);
+
+    if (QFile::exists(targetPath)) {
+        QFile::remove(targetPath);
+    }
+
+    bool success = QFile::rename(tempPath, targetPath);
+    if (!success) {
+        // If rename failed (e.g. across different filesystems / mounts), use copy
+        QFile::remove(targetPath);
+        success = QFile::copy(tempPath, targetPath);
+        QFile::remove(tempPath);
+    }
+
+    if (success && isSameAsLoaded) {
+        // Reload poppler document handle to point to the newly written file
+        m_doc.reset(poppler::document::load_from_file(m_filePath.toStdString()));
+    }
+
+    return success;
 }
 
 bool DocumentEngine::isLoaded() const {

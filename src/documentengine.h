@@ -28,7 +28,7 @@ public:
     QString filePath() const { return m_filePath; }
     int pageCount() const;
     QSizeF pageSize(int index) const;
-    QImage renderPage(int index, double dpi = 150.0, bool darkMode = false);
+    QImage renderPage(int index, double dpi = 150.0, bool darkMode = false, int rotation = 0);
 
     QString title() const;
     QString author() const;

@@ -4,12 +4,15 @@
 #include "portalfilepicker.h"
 
 #include <QFileInfo>
+#include <QSettings>
+#include <QUrl>
 #include <algorithm>
 
 Backend::Backend(DocumentEngine *engine, PageImageProvider *provider, QObject *parent)
     : QObject(parent), m_engine(engine), m_provider(provider) {
     m_picker = new PortalFilePicker(this);
     connect(m_picker, &PortalFilePicker::fileSelected, this, &Backend::openFile);
+    loadRecents();
 }
 
 QString Backend::filePath() const {
@@ -52,8 +55,8 @@ void Backend::setCurrentPage(int page) {
 }
 
 void Backend::setZoom(double z) {
-    const double clamped = std::clamp(z, 0.25, 4.0);
-    if (clamped != m_zoom) {
+    const double clamped = std::clamp(z, 0.2, 5.0);
+    if (std::abs(clamped - m_zoom) > 0.001) {
         m_zoom = clamped;
         emit zoomChanged();
     }
@@ -66,6 +69,24 @@ void Backend::setDarkMode(bool dark) {
         ++m_revision;
         emit darkModeChanged();
         emit revisionChanged();
+    }
+}
+
+void Backend::setRotation(int rot) {
+    const int norm = (rot % 360 + 360) % 360;
+    if (norm != m_rotation) {
+        m_rotation = norm;
+        if (m_provider) m_provider->clearCache();
+        ++m_revision;
+        emit rotationChanged();
+        emit revisionChanged();
+    }
+}
+
+void Backend::setFitMode(int mode) {
+    if (mode != m_fitMode) {
+        m_fitMode = mode;
+        emit fitModeChanged();
     }
 }
 
@@ -95,15 +116,27 @@ void Backend::openFile(const QString &path) {
         if (m_provider) m_provider->clearCache();
         m_currentPage = 0;
         m_zoom = 1.0;
+        m_rotation = 0;
+        m_fitMode = 0;
         m_toc = m_engine->tableOfContents();
         clearSearch();
         ++m_revision;
 
+        addRecentFile(cleanPath);
+
         emit documentChanged();
         emit currentPageChanged();
         emit zoomChanged();
+        emit rotationChanged();
+        emit fitModeChanged();
         emit tocChanged();
         emit revisionChanged();
+    }
+}
+
+void Backend::openRecent(int index) {
+    if (index >= 0 && index < m_recentFiles.size()) {
+        openFile(m_recentFiles.at(index));
     }
 }
 
@@ -118,12 +151,14 @@ void Backend::closeDocument() {
         m_engine->close();
         if (m_provider) m_provider->clearCache();
         m_currentPage = 0;
+        m_rotation = 0;
         m_toc.clear();
         clearSearch();
         ++m_revision;
 
         emit documentChanged();
         emit currentPageChanged();
+        emit rotationChanged();
         emit tocChanged();
         emit revisionChanged();
     }
@@ -142,19 +177,55 @@ void Backend::goToPage(int page) {
 }
 
 void Backend::zoomIn() {
+    m_fitMode = 0;
+    emit fitModeChanged();
     setZoom(m_zoom * 1.25);
 }
 
 void Backend::zoomOut() {
+    m_fitMode = 0;
+    emit fitModeChanged();
     setZoom(m_zoom / 1.25);
 }
 
 void Backend::resetZoom() {
+    m_fitMode = 0;
+    emit fitModeChanged();
     setZoom(1.0);
+}
+
+void Backend::fitToWidth(double viewportWidth) {
+    const QSizeF ps = pageSize(m_currentPage);
+    const double w = (m_rotation == 90 || m_rotation == 270) ? ps.height() : ps.width();
+    if (w > 0.0 && viewportWidth > 64.0) {
+        // Render base DPI is 140 / 72.0
+        const double baseWidth = w * (140.0 / 72.0);
+        const double targetZoom = (viewportWidth - 48.0) / baseWidth;
+        setZoom(targetZoom);
+        setFitMode(1);
+    }
+}
+
+void Backend::fitToPage(double viewportWidth, double viewportHeight) {
+    const QSizeF ps = pageSize(m_currentPage);
+    const double w = (m_rotation == 90 || m_rotation == 270) ? ps.height() : ps.width();
+    const double h = (m_rotation == 90 || m_rotation == 270) ? ps.width() : ps.height();
+    if (w > 0.0 && h > 0.0 && viewportWidth > 64.0 && viewportHeight > 64.0) {
+        const double baseWidth = w * (140.0 / 72.0);
+        const double baseHeight = h * (140.0 / 72.0);
+        const double zW = (viewportWidth - 48.0) / baseWidth;
+        const double zH = (viewportHeight - 64.0) / baseHeight;
+        setZoom(std::min(zW, zH));
+        setFitMode(2);
+    }
 }
 
 void Backend::toggleDarkMode() {
     setDarkMode(!m_darkMode);
+}
+
+void Backend::rotateClockwise() {
+    setRotation(m_rotation + 90);
 }
 
 void Backend::toggleToc() {
@@ -203,13 +274,49 @@ void Backend::clearSearch() {
 
 QString Backend::pageImageUrl(int pageIndex, double dpi) const {
     const QString darkFlag = m_darkMode ? QStringLiteral("1") : QStringLiteral("0");
-    return QStringLiteral("image://doc/%1_%2_%3_%4")
+    return QStringLiteral("image://doc/%1_%2_%3_%4_%5")
         .arg(pageIndex)
         .arg(static_cast<int>(dpi))
         .arg(darkFlag)
+        .arg(m_rotation)
         .arg(m_revision);
 }
 
 QSizeF Backend::pageSize(int pageIndex) const {
     return m_engine ? m_engine->pageSize(pageIndex) : QSizeF(0, 0);
+}
+
+double Backend::pageAspectRatio(int pageIndex) const {
+    const QSizeF ps = pageSize(pageIndex);
+    if (ps.height() <= 0.0) return 0.707; // standard A4
+    if (m_rotation == 90 || m_rotation == 270)
+        return ps.height() / ps.width();
+    return ps.width() / ps.height();
+}
+
+void Backend::addRecentFile(const QString &path) {
+    if (path.isEmpty()) return;
+    m_recentFiles.removeAll(path);
+    m_recentFiles.prepend(path);
+    while (m_recentFiles.size() > 8) {
+        m_recentFiles.removeLast();
+    }
+    saveRecents();
+    emit recentFilesChanged();
+}
+
+void Backend::clearRecents() {
+    m_recentFiles.clear();
+    saveRecents();
+    emit recentFilesChanged();
+}
+
+void Backend::loadRecents() {
+    QSettings settings(QStringLiteral("omarchy"), QStringLiteral("omadoc"));
+    m_recentFiles = settings.value(QStringLiteral("recentFiles")).toStringList();
+}
+
+void Backend::saveRecents() {
+    QSettings settings(QStringLiteral("omarchy"), QStringLiteral("omadoc"));
+    settings.setValue(QStringLiteral("recentFiles"), m_recentFiles);
 }

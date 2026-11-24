@@ -59,7 +59,7 @@ QSizeF DocumentEngine::pageSize(int index) const {
     return QSizeF(rect.width(), rect.height());
 }
 
-QImage DocumentEngine::renderPage(int index, double dpi, bool darkMode) {
+QImage DocumentEngine::renderPage(int index, double dpi, bool darkMode, int rotation) {
     std::lock_guard<std::mutex> lock(m_mutex);
     if (!m_doc || index < 0 || index >= m_doc->pages())
         return QImage();
@@ -74,7 +74,12 @@ QImage DocumentEngine::renderPage(int index, double dpi, bool darkMode) {
     renderer.set_render_hint(poppler::page_renderer::text_hinting, true);
     renderer.set_image_format(poppler::image::format_argb32);
 
-    poppler::image img = renderer.render_page(p.get(), dpi, dpi);
+    poppler::rotation_enum rot = poppler::rotate_0;
+    if (rotation == 90) rot = poppler::rotate_90;
+    else if (rotation == 180) rot = poppler::rotate_180;
+    else if (rotation == 270) rot = poppler::rotate_270;
+
+    poppler::image img = renderer.render_page(p.get(), dpi, dpi, -1, -1, -1, -1, rot);
     if (!img.is_valid())
         return QImage();
 

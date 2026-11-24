@@ -1,6 +1,9 @@
 <RCC>
     <qresource prefix="/">
         <file alias="Main.qml">Main.qml</file>
+        <file alias="IconButton.qml">IconButton.qml</file>
+        <file alias="PillBadge.qml">PillBadge.qml</file>
+        <file alias="PageScrubber.qml">PageScrubber.qml</file>
         <file alias="i18n/en.json">i18n/en.json</file>
         <file alias="i18n/da.json">i18n/da.json</file>
     </qresource>

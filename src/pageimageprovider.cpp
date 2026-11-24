@@ -5,7 +5,7 @@
 
 PageImageProvider::PageImageProvider(DocumentEngine *engine)
     : QQuickImageProvider(QQuickImageProvider::Image), m_engine(engine) {
-    m_cache.setMaxCost(24);
+    m_cache.setMaxCost(32);
 }
 
 QImage PageImageProvider::requestImage(const QString &id, QSize *size, const QSize &requestedSize) {
@@ -25,8 +25,9 @@ QImage PageImageProvider::requestImage(const QString &id, QSize *size, const QSi
     double dpi = parts.size() > 1 ? parts.value(1).toDouble() : 150.0;
     if (dpi <= 10.0) dpi = 150.0;
     const bool darkMode = parts.size() > 2 ? (parts.value(2) == "1") : false;
+    const int rotation = parts.size() > 3 ? parts.value(3).toInt() : 0;
 
-    const QImage img = m_engine ? m_engine->renderPage(pageIndex, dpi, darkMode) : QImage();
+    const QImage img = m_engine ? m_engine->renderPage(pageIndex, dpi, darkMode, rotation) : QImage();
 
     if (!img.isNull()) {
         QMutexLocker locker(&m_mutex);

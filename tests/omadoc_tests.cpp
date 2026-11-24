@@ -24,6 +24,7 @@ private slots:
         QCOMPARE(backend.currentPage(), 0);
         QCOMPARE(backend.zoom(), 1.0);
         QCOMPARE(backend.darkMode(), false);
+        QCOMPARE(backend.rotation(), 0);
         QCOMPARE(backend.pageCount(), 0);
     }
 
@@ -32,17 +33,17 @@ private slots:
         PageImageProvider provider(&engine);
         Backend backend(&engine, &provider);
 
-        backend.setZoom(0.1);
-        QCOMPARE(backend.zoom(), 0.25);
+        backend.setZoom(0.05);
+        QCOMPARE(backend.zoom(), 0.2);
 
         backend.setZoom(10.0);
-        QCOMPARE(backend.zoom(), 4.0);
+        QCOMPARE(backend.zoom(), 5.0);
 
         backend.resetZoom();
         QCOMPARE(backend.zoom(), 1.0);
     }
 
-    void testDarkModeToggle() {
+    void testDarkModeAndRotationToggle() {
         DocumentEngine engine;
         PageImageProvider provider(&engine);
         Backend backend(&engine, &provider);
@@ -52,8 +53,17 @@ private slots:
         QCOMPARE(backend.darkMode(), true);
         QVERIFY(backend.revision() > initialRev);
 
-        backend.toggleDarkMode();
-        QCOMPARE(backend.darkMode(), false);
+        backend.rotateClockwise();
+        QCOMPARE(backend.rotation(), 90);
+
+        backend.rotateClockwise();
+        QCOMPARE(backend.rotation(), 180);
+
+        backend.rotateClockwise();
+        QCOMPARE(backend.rotation(), 270);
+
+        backend.rotateClockwise();
+        QCOMPARE(backend.rotation(), 0);
     }
 
     void testThemeFallback() {
@@ -119,13 +129,18 @@ private slots:
         backend.prevPage();
         QCOMPARE(backend.currentPage(), 0);
 
-        // Test page rendering
-        const QImage page0 = engine.renderPage(0, 72.0, false);
+        // Test page rendering normal and rotated
+        const QImage page0 = engine.renderPage(0, 72.0, false, 0);
         QVERIFY(!page0.isNull());
         QVERIFY(page0.width() > 0 && page0.height() > 0);
 
+        const QImage page0Rot = engine.renderPage(0, 72.0, false, 90);
+        QVERIFY(!page0Rot.isNull());
+        QCOMPARE(page0Rot.width(), page0.height());
+        QCOMPARE(page0Rot.height(), page0.width());
+
         // Test night mode inversion
-        const QImage page0Night = engine.renderPage(0, 72.0, true);
+        const QImage page0Night = engine.renderPage(0, 72.0, true, 0);
         QVERIFY(!page0Night.isNull());
 
         // Test text search

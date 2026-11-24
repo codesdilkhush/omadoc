@@ -3,6 +3,7 @@
 
 #include <QObject>
 #include <QString>
+#include <QStringList>
 #include <QVariantList>
 #include <QList>
 #include <QSizeF>
@@ -20,6 +21,7 @@ class Backend : public QObject {
     Q_PROPERTY(int currentPage READ currentPage WRITE setCurrentPage NOTIFY currentPageChanged)
     Q_PROPERTY(double zoom READ zoom WRITE setZoom NOTIFY zoomChanged)
     Q_PROPERTY(bool darkMode READ darkMode WRITE setDarkMode NOTIFY darkModeChanged)
+    Q_PROPERTY(int rotation READ rotation WRITE setRotation NOTIFY rotationChanged)
     Q_PROPERTY(bool hasDocument READ hasDocument NOTIFY documentChanged)
     Q_PROPERTY(QVariantList toc READ toc NOTIFY tocChanged)
     Q_PROPERTY(bool tocVisible READ tocVisible WRITE setTocVisible NOTIFY tocVisibleChanged)
@@ -28,6 +30,8 @@ class Backend : public QObject {
     Q_PROPERTY(int searchResultsCount READ searchResultsCount NOTIFY searchChanged)
     Q_PROPERTY(int searchCurrentIndex READ searchCurrentIndex NOTIFY searchChanged)
     Q_PROPERTY(int revision READ revision NOTIFY revisionChanged)
+    Q_PROPERTY(QStringList recentFiles READ recentFiles NOTIFY recentFilesChanged)
+    Q_PROPERTY(int fitMode READ fitMode WRITE setFitMode NOTIFY fitModeChanged)
 
 public:
     explicit Backend(DocumentEngine *engine, PageImageProvider *provider, QObject *parent = nullptr);
@@ -45,6 +49,12 @@ public:
     bool darkMode() const { return m_darkMode; }
     void setDarkMode(bool dark);
 
+    int rotation() const { return m_rotation; }
+    void setRotation(int rot);
+
+    int fitMode() const { return m_fitMode; }
+    void setFitMode(int mode);
+
     bool hasDocument() const;
     QVariantList toc() const { return m_toc; }
 
@@ -58,10 +68,13 @@ public:
     int searchResultsCount() const { return m_searchResults.size(); }
     int searchCurrentIndex() const { return m_searchIndex; }
     int revision() const { return m_revision; }
+    QStringList recentFiles() const { return m_recentFiles; }
 
     Q_INVOKABLE void openFile(const QString &path);
+    Q_INVOKABLE void openRecent(int index);
     Q_INVOKABLE void openPortal();
     Q_INVOKABLE void closeDocument();
+    Q_INVOKABLE void clearRecents();
 
     Q_INVOKABLE void nextPage();
     Q_INVOKABLE void prevPage();
@@ -70,8 +83,11 @@ public:
     Q_INVOKABLE void zoomIn();
     Q_INVOKABLE void zoomOut();
     Q_INVOKABLE void resetZoom();
+    Q_INVOKABLE void fitToWidth(double viewportWidth);
+    Q_INVOKABLE void fitToPage(double viewportWidth, double viewportHeight);
 
     Q_INVOKABLE void toggleDarkMode();
+    Q_INVOKABLE void rotateClockwise();
     Q_INVOKABLE void toggleToc();
     Q_INVOKABLE void toggleHelp();
 
@@ -82,19 +98,27 @@ public:
 
     Q_INVOKABLE QString pageImageUrl(int pageIndex, double dpi = 150.0) const;
     Q_INVOKABLE QSizeF pageSize(int pageIndex) const;
+    Q_INVOKABLE double pageAspectRatio(int pageIndex) const;
 
 signals:
     void documentChanged();
     void currentPageChanged();
     void zoomChanged();
     void darkModeChanged();
+    void rotationChanged();
+    void fitModeChanged();
     void tocChanged();
     void tocVisibleChanged();
     void helpVisibleChanged();
     void searchChanged();
     void revisionChanged();
+    void recentFilesChanged();
 
 private:
+    void addRecentFile(const QString &path);
+    void loadRecents();
+    void saveRecents();
+
     DocumentEngine *m_engine;
     PageImageProvider *m_provider;
     PortalFilePicker *m_picker;
@@ -102,10 +126,13 @@ private:
     int m_currentPage = 0;
     double m_zoom = 1.0;
     bool m_darkMode = false;
+    int m_rotation = 0;
+    int m_fitMode = 0; // 0 = Free, 1 = FitWidth, 2 = FitPage
     bool m_tocVisible = false;
     bool m_helpVisible = false;
     int m_revision = 0;
 
+    QStringList m_recentFiles;
     QVariantList m_toc;
     QString m_searchQuery;
     QList<int> m_searchResults;

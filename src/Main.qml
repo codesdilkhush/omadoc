@@ -768,7 +768,7 @@ ApplicationWindow {
     // Help & Keyboard Shortcuts Modal
     Rectangle {
         anchors.fill: parent
-        color: "#c8000000"
+        color: "#ee090a10"
         visible: backend.helpVisible
 
         MouseArea {
@@ -778,112 +778,203 @@ ApplicationWindow {
 
         Rectangle {
             anchors.centerIn: parent
-            width: 500
-            height: 420
-            radius: Math.max(8, theme.radius)
-            color: "#151722"
-            border.color: "#282c3c"
+            width: 620
+            implicitHeight: modalContent.implicitHeight + 48
+            radius: Math.max(10, theme.radius)
+            color: "#161823"
+            border.color: "#2b2f40"
             border.width: 1
 
             ColumnLayout {
+                id: modalContent
                 anchors.fill: parent
-                anchors.margins: 22
-                spacing: 14
+                anchors.margins: 24
+                spacing: 20
 
+                // Modal Header
                 RowLayout {
                     Layout.fillWidth: true
                     Text {
                         text: qsTr("Keyboard Shortcuts")
-                        font.pixelSize: 17
+                        font.pixelSize: 18
                         font.weight: Font.Bold
                         color: "#ffffff"
                         Layout.fillWidth: true
                     }
                     IconButton {
                         iconSource: "qrc:/icons/close.svg"
-                        iconSize: 15
+                        iconSize: 14
                         implicitWidth: 28
                         implicitHeight: 28
                         onClicked: backend.helpVisible = false
                     }
                 }
 
-                GridLayout {
-                    columns: 2
-                    rowSpacing: 7
-                    columnSpacing: 24
+                // Two Column Layout
+                RowLayout {
                     Layout.fillWidth: true
+                    spacing: 32
 
-                    Row {
-                        spacing: 4
-                        PillBadge { text: "J"; isAccent: true }
-                        PillBadge { text: "Space" }
-                        PillBadge { text: "PgDn" }
+                    // Column 1: Navigation & View
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 10
+
+                        Text {
+                            text: qsTr("NAVIGATION & VIEW")
+                            font.pixelSize: 10
+                            font.weight: Font.Bold
+                            color: theme.accent
+                            font.letterSpacing: 0.5
+                        }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            Row {
+                                spacing: 4
+                                KeyBadge { text: "J" }
+                                KeyBadge { text: "Space" }
+                                KeyBadge { text: "PgDn" }
+                            }
+                            Item { Layout.fillWidth: true }
+                            Text { text: qsTr("Next page"); color: "#d1d5db"; font.pixelSize: 12 }
+                        }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            Row {
+                                spacing: 4
+                                KeyBadge { text: "K" }
+                                KeyBadge { text: "Shift+Space" }
+                                KeyBadge { text: "PgUp" }
+                            }
+                            Item { Layout.fillWidth: true }
+                            Text { text: qsTr("Previous page"); color: "#d1d5db"; font.pixelSize: 12 }
+                        }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            Row {
+                                spacing: 4
+                                KeyBadge { text: "Home" }
+                                KeyBadge { text: "End" }
+                            }
+                            Item { Layout.fillWidth: true }
+                            Text { text: qsTr("First / Last page"); color: "#d1d5db"; font.pixelSize: 12 }
+                        }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            Row {
+                                spacing: 4
+                                KeyBadge { text: "+" }
+                                KeyBadge { text: "−" }
+                                KeyBadge { text: "0" }
+                            }
+                            Item { Layout.fillWidth: true }
+                            Text { text: qsTr("Zoom In / Out / 100%"); color: "#d1d5db"; font.pixelSize: 12 }
+                        }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            Row {
+                                spacing: 4
+                                KeyBadge { text: "W" }
+                                KeyBadge { text: "P" }
+                            }
+                            Item { Layout.fillWidth: true }
+                            Text { text: qsTr("Fit to Width / Page"); color: "#d1d5db"; font.pixelSize: 12 }
+                        }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            KeyBadge { text: "R" }
+                            Item { Layout.fillWidth: true }
+                            Text { text: qsTr("Rotate 90° clockwise"); color: "#d1d5db"; font.pixelSize: 12 }
+                        }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            KeyBadge { text: "D" }
+                            Item { Layout.fillWidth: true }
+                            Text { text: qsTr("Night reading mode"); color: "#d1d5db"; font.pixelSize: 12 }
+                        }
                     }
-                    Text { text: qsTr("Next page"); color: "#e5e7eb"; font.pixelSize: 12 }
 
-                    Row {
-                        spacing: 4
-                        PillBadge { text: "K"; isAccent: true }
-                        PillBadge { text: "Shift+Space" }
-                        PillBadge { text: "PgUp" }
+                    // Column 2: Document & Search
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 10
+
+                        Text {
+                            text: qsTr("DOCUMENT & SEARCH")
+                            font.pixelSize: 10
+                            font.weight: Font.Bold
+                            color: theme.accent
+                            font.letterSpacing: 0.5
+                        }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            KeyBadge { text: "T" }
+                            Item { Layout.fillWidth: true }
+                            Text { text: qsTr("Toggle Contents"); color: "#d1d5db"; font.pixelSize: 12 }
+                        }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            KeyBadge { text: "/" }
+                            Item { Layout.fillWidth: true }
+                            Text { text: qsTr("Find in document"); color: "#d1d5db"; font.pixelSize: 12 }
+                        }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            Row {
+                                spacing: 4
+                                KeyBadge { text: "N" }
+                                KeyBadge { text: "Shift+N" }
+                            }
+                            Item { Layout.fillWidth: true }
+                            Text { text: qsTr("Next / Prev match"); color: "#d1d5db"; font.pixelSize: 12 }
+                        }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            Row {
+                                spacing: 4
+                                KeyBadge { text: "Ctrl+O" }
+                                KeyBadge { text: "O" }
+                            }
+                            Item { Layout.fillWidth: true }
+                            Text { text: qsTr("Open document"); color: "#d1d5db"; font.pixelSize: 12 }
+                        }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            KeyBadge { text: "Ctrl+S" }
+                            Item { Layout.fillWidth: true }
+                            Text { text: qsTr("Save copy"); color: "#d1d5db"; font.pixelSize: 12 }
+                        }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            KeyBadge { text: "Ctrl+Shift+S" }
+                            Item { Layout.fillWidth: true }
+                            Text { text: qsTr("Save As..."); color: "#d1d5db"; font.pixelSize: 12 }
+                        }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            Row {
+                                spacing: 4
+                                KeyBadge { text: "Esc" }
+                                KeyBadge { text: "Q" }
+                            }
+                            Item { Layout.fillWidth: true }
+                            Text { text: qsTr("Close / Quit"); color: "#d1d5db"; font.pixelSize: 12 }
+                        }
                     }
-                    Text { text: qsTr("Previous page"); color: "#e5e7eb"; font.pixelSize: 12 }
-
-                    Row {
-                        spacing: 4
-                        PillBadge { text: "Home" }
-                        PillBadge { text: "End" }
-                    }
-                    Text { text: qsTr("First / Last page"); color: "#e5e7eb"; font.pixelSize: 12 }
-
-                    Row {
-                        spacing: 4
-                        PillBadge { text: "+" }
-                        PillBadge { text: "−" }
-                        PillBadge { text: "0" }
-                    }
-                    Text { text: qsTr("Zoom In / Out / Reset"); color: "#e5e7eb"; font.pixelSize: 12 }
-
-                    Row {
-                        spacing: 4
-                        PillBadge { text: "W" }
-                        PillBadge { text: "P" }
-                    }
-                    Text { text: qsTr("Fit to Width / Page"); color: "#e5e7eb"; font.pixelSize: 12 }
-
-                    PillBadge { text: "R"; isAccent: true }
-                    Text { text: qsTr("Rotate 90 degrees"); color: "#e5e7eb"; font.pixelSize: 12 }
-
-                    PillBadge { text: "D"; isAccent: true }
-                    Text { text: qsTr("Night reading mode"); color: "#e5e7eb"; font.pixelSize: 12 }
-
-                    PillBadge { text: "T"; isAccent: true }
-                    Text { text: qsTr("Toggle Table of Contents"); color: "#e5e7eb"; font.pixelSize: 12 }
-
-                    PillBadge { text: "/"; isAccent: true }
-                    Text { text: qsTr("Search in document"); color: "#e5e7eb"; font.pixelSize: 12 }
-
-                    Row {
-                        spacing: 4
-                        PillBadge { text: "N" }
-                        PillBadge { text: "Shift+N" }
-                    }
-                    Text { text: qsTr("Next / Previous match"); color: "#e5e7eb"; font.pixelSize: 12 }
-
-                    Row {
-                        spacing: 4
-                        PillBadge { text: "O" }
-                        PillBadge { text: "Ctrl+O" }
-                    }
-                    Text { text: qsTr("Open file dialog"); color: "#e5e7eb"; font.pixelSize: 12 }
-
-                    Row {
-                        spacing: 4
-                        PillBadge { text: "Q" }
-                        PillBadge { text: "Esc" }
-                    }
-                    Text { text: qsTr("Quit / Close overlay"); color: "#e5e7eb"; font.pixelSize: 12 }
                 }
             }
         }

@@ -3,6 +3,7 @@
         <file alias="Main.qml">Main.qml</file>
         <file alias="IconButton.qml">IconButton.qml</file>
         <file alias="PillBadge.qml">PillBadge.qml</file>
+        <file alias="KeyBadge.qml">KeyBadge.qml</file>
         <file alias="PageScrubber.qml">PageScrubber.qml</file>
         <file alias="icons/sidebar.svg">icons/sidebar.svg</file>
         <file alias="icons/search.svg">icons/search.svg</file>

@@ -17,6 +17,11 @@ ApplicationWindow {
     Material.accent: theme.accent
     Material.roundedScale: theme.radius
 
+    Item {
+        id: windowFocusTarget
+        focus: true
+    }
+
     // Check if user is typing in a text input field to avoid intercepting keystrokes
     readonly property bool isInputActive: (typeof zoomInput !== "undefined" && zoomInput.activeFocus) ||
                                           (typeof searchField !== "undefined" && searchField.activeFocus)
@@ -76,6 +81,10 @@ ApplicationWindow {
             Layout.fillWidth: true
             height: 48
             color: "#12131a"
+
+            TapHandler {
+                onTapped: windowFocusTarget.forceActiveFocus()
+            }
 
             Rectangle {
                 anchors.bottom: parent.bottom
@@ -206,9 +215,13 @@ ApplicationWindow {
                             Layout.preferredWidth: 48
                             Layout.preferredHeight: 24
                             radius: 4
-                            color: zoomInput.activeFocus ? "#181a24" : (zoomMouse.containsMouse ? "#1c1e2a" : "transparent")
-                            border.color: zoomInput.activeFocus ? theme.accent : (zoomMouse.containsMouse ? "#2f3346" : "#222533")
+                            color: zoomInput.activeFocus ? "#181a24" : (zoomHover.hovered ? "#1c1e2a" : "transparent")
+                            border.color: zoomInput.activeFocus ? theme.accent : (zoomHover.hovered ? "#2f3346" : "#222533")
                             border.width: 1
+
+                            HoverHandler {
+                                id: zoomHover
+                            }
 
                             TextInput {
                                 id: zoomInput
@@ -234,16 +247,16 @@ ApplicationWindow {
                                         backend.setZoom(val / 100.0);
                                     }
                                     text = Math.round(backend.zoom * 100) + "%";
-                                    zoomInput.focus = false;
-                                    win.forceActiveFocus();
+                                    if (activeFocus) {
+                                        windowFocusTarget.forceActiveFocus();
+                                    }
                                 }
 
                                 onAccepted: commitZoom()
 
                                 Keys.onEscapePressed: {
                                     text = Math.round(backend.zoom * 100) + "%";
-                                    zoomInput.focus = false;
-                                    win.forceActiveFocus();
+                                    windowFocusTarget.forceActiveFocus();
                                 }
 
                                 onActiveFocusChanged: {
@@ -266,15 +279,7 @@ ApplicationWindow {
                                 }
                             }
 
-                            MouseArea {
-                                id: zoomMouse
-                                anchors.fill: parent
-                                cursorShape: Qt.IBeamCursor
-                                hoverEnabled: true
-                                acceptedButtons: Qt.NoButton
-                            }
-
-                            ToolTip.visible: zoomMouse.containsMouse && !zoomInput.activeFocus
+                            ToolTip.visible: zoomHover.hovered && !zoomInput.activeFocus
                             ToolTip.delay: 400
                             ToolTip.text: qsTr("Zoom percentage (click to edit)")
                         }
@@ -512,6 +517,10 @@ ApplicationWindow {
                     anchors.fill: parent
                     visible: !backend.hasDocument
 
+                    TapHandler {
+                        onTapped: windowFocusTarget.forceActiveFocus()
+                    }
+
                     ColumnLayout {
                         anchors.centerIn: parent
                         width: Math.min(parent.width - 48, 520)
@@ -682,6 +691,10 @@ ApplicationWindow {
                     contentHeight: Math.max(height, pagePaper.height + 64)
                     clip: true
                     boundsBehavior: Flickable.StopAtBounds
+
+                    TapHandler {
+                        onTapped: windowFocusTarget.forceActiveFocus()
+                    }
 
                     onWidthChanged: {
                         if (backend.fitMode === 1) backend.fitToWidth(width);

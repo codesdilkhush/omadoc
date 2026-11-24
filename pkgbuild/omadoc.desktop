@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Omadoc
+Comment=Fast and minimal document reader
+Exec=omadoc %f
+Icon=omadoc
+Terminal=false
+Categories=Office;Viewer;Graphics;
+MimeType=application/pdf;
+StartupWMClass=omadoc

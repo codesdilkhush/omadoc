@@ -5,13 +5,13 @@ import QtQuick.Layouts
 
 ApplicationWindow {
     id: win
-    width: 1080
+    width: 1100
     height: 780
-    minimumWidth: 700
-    minimumHeight: 500
+    minimumWidth: 720
+    minimumHeight: 520
     visible: true
     title: backend.hasDocument ? backend.title + " — Omadoc" : "Omadoc"
-    color: "#0f1015"
+    color: "#0d0e12"
 
     Material.theme: Material.Dark
     Material.accent: theme.accent
@@ -45,8 +45,7 @@ ApplicationWindow {
         sequence: "/"
         context: Qt.ApplicationShortcut
         onActivated: {
-            searchBar.visible = true;
-            searchInput.forceActiveFocus();
+            floatingSearch.openSearch();
         }
     }
     Shortcut { sequence: "N"; context: Qt.ApplicationShortcut; onActivated: backend.nextSearchResult() }
@@ -56,7 +55,7 @@ ApplicationWindow {
         context: Qt.ApplicationShortcut
         onActivated: {
             if (backend.helpVisible) backend.helpVisible = false;
-            else if (searchBar.visible) { searchBar.visible = false; backend.clearSearch(); }
+            else if (floatingSearch.visible) floatingSearch.closeSearch();
         }
     }
 
@@ -64,61 +63,50 @@ ApplicationWindow {
         anchors.fill: parent
         spacing: 0
 
-        // Modern Header Toolbar
+        // Streamlined Header Toolbar (Grouped)
         Rectangle {
             id: headerBar
             Layout.fillWidth: true
-            height: 52
-            color: "#14151c"
+            height: 48
+            color: "#12131a"
 
             Rectangle {
                 anchors.bottom: parent.bottom
                 width: parent.width
                 height: 1
-                color: "#21232d"
+                color: "#1e202a"
             }
 
             RowLayout {
                 anchors.fill: parent
                 anchors.leftMargin: 12
                 anchors.rightMargin: 12
-                spacing: 8
+                spacing: 12
 
-                // Sidebar Toggle
-                IconButton {
-                    iconText: "☰"
-                    tooltipText: qsTr("Table of Contents (T)")
-                    active: backend.tocVisible
-                    visible: backend.hasDocument && backend.toc.length > 0
-                    onClicked: backend.toggleToc()
-                }
-
-                // Document Title
+                // Group 1: Document Context & Sidebar
                 RowLayout {
                     spacing: 8
-                    Layout.maximumWidth: 260
-                    Layout.fillWidth: false
+                    Layout.maximumWidth: 280
 
-                    Rectangle {
-                        width: 24
-                        height: 24
-                        radius: 6
-                        color: theme.accent
+                    IconButton {
+                        iconSource: "qrc:/icons/sidebar.svg"
+                        tooltipText: qsTr("Table of Contents (T)")
+                        active: backend.tocVisible
+                        visible: backend.hasDocument && backend.toc.length > 0
+                        onClicked: backend.toggleToc()
+                    }
+
+                    Image {
+                        source: "qrc:/icons/document.svg"
+                        width: 16
+                        height: 16
                         visible: backend.hasDocument
-
-                        Text {
-                            anchors.centerIn: parent
-                            text: "PDF"
-                            font.pixelSize: 9
-                            font.bold: true
-                            color: theme.accentForeground
-                        }
                     }
 
                     Text {
                         text: backend.hasDocument ? backend.title : "Omadoc"
                         font.pixelSize: 13
-                        font.weight: Font.DemiBold
+                        font.weight: Font.SemiBold
                         color: "#f3f4f6"
                         elide: Text.ElideRight
                         Layout.fillWidth: true
@@ -127,34 +115,40 @@ ApplicationWindow {
 
                 Item { Layout.fillWidth: true } // Spacer
 
-                // Centered Navigation Controls
-                RowLayout {
+                // Group 2: Center Unified Navigation & View Island
+                Rectangle {
                     visible: backend.hasDocument
-                    spacing: 6
+                    implicitHeight: 34
+                    implicitWidth: navIslandRow.implicitWidth + 8
+                    radius: 17
+                    color: "#191b24"
+                    border.color: "#272a38"
+                    border.width: 1
 
-                    IconButton {
-                        iconText: "‹"
-                        tooltipText: qsTr("Previous Page (K)")
-                        onClicked: backend.prevPage()
-                    }
+                    RowLayout {
+                        id: navIslandRow
+                        anchors.centerIn: parent
+                        spacing: 2
 
-                    Rectangle {
-                        implicitWidth: 84
-                        implicitHeight: 28
-                        radius: 14
-                        color: "#1c1e27"
-                        border.color: "#2b2e3c"
-                        border.width: 1
+                        // Page Previous
+                        IconButton {
+                            iconSource: "qrc:/icons/chevron-left.svg"
+                            iconSize: 14
+                            enabled: backend.currentPage > 0
+                            tooltipText: qsTr("Previous Page (K / Shift+Space)")
+                            onClicked: backend.prevPage()
+                        }
 
+                        // Page Jump Input
                         Row {
-                            anchors.centerIn: parent
-                            spacing: 4
+                            spacing: 3
+                            anchors.verticalCenter: parent.verticalCenter
 
                             TextInput {
-                                id: pageInput
+                                id: pageJumpInput
                                 text: (backend.currentPage + 1).toString()
                                 font.pixelSize: 12
-                                font.bold: true
+                                font.weight: Font.Bold
                                 color: "#ffffff"
                                 selectByMouse: true
                                 horizontalAlignment: Text.AlignRight
@@ -162,247 +156,170 @@ ApplicationWindow {
                                 onAccepted: {
                                     const val = parseInt(text) - 1;
                                     if (!isNaN(val)) backend.goToPage(val);
-                                    pageInput.focus = false;
+                                    pageJumpInput.focus = false;
                                 }
                             }
 
                             Text {
                                 text: "/ " + backend.pageCount
                                 font.pixelSize: 11
-                                color: "#787e91"
+                                color: "#717789"
                                 anchors.verticalCenter: parent.verticalCenter
                             }
                         }
-                    }
 
-                    IconButton {
-                        iconText: "›"
-                        tooltipText: qsTr("Next Page (J / Space)")
-                        onClicked: backend.nextPage()
+                        // Page Next
+                        IconButton {
+                            iconSource: "qrc:/icons/chevron-right.svg"
+                            iconSize: 14
+                            enabled: backend.currentPage < backend.pageCount - 1
+                            tooltipText: qsTr("Next Page (J / Space)")
+                            onClicked: backend.nextPage()
+                        }
+
+                        // Divider Line
+                        Rectangle {
+                            width: 1
+                            height: 16
+                            color: "#272a38"
+                            Layout.leftMargin: 4
+                            Layout.rightMargin: 4
+                        }
+
+                        // Zoom Controls
+                        IconButton {
+                            iconSource: "qrc:/icons/zoom-out.svg"
+                            iconSize: 13
+                            tooltipText: qsTr("Zoom Out (-)")
+                            onClicked: backend.zoomOut()
+                        }
+
+                        Text {
+                            text: Math.round(backend.zoom * 100) + "%"
+                            font.pixelSize: 11
+                            font.weight: Font.Medium
+                            color: "#b0b5c4"
+                            Layout.minimumWidth: 36
+                            horizontalAlignment: Text.AlignHCenter
+                        }
+
+                        IconButton {
+                            iconSource: "qrc:/icons/zoom-in.svg"
+                            iconSize: 13
+                            tooltipText: qsTr("Zoom In (+)")
+                            onClicked: backend.zoomIn()
+                        }
+
+                        // Divider Line
+                        Rectangle {
+                            width: 1
+                            height: 16
+                            color: "#272a38"
+                            Layout.leftMargin: 4
+                            Layout.rightMargin: 4
+                        }
+
+                        // Fit to Width
+                        IconButton {
+                            iconSource: "qrc:/icons/fit-width.svg"
+                            iconSize: 14
+                            active: backend.fitMode === 1
+                            tooltipText: qsTr("Fit to Width (W)")
+                            onClicked: backend.fitToWidth(flickable.width)
+                        }
+
+                        // Fit to Page
+                        IconButton {
+                            iconSource: "qrc:/icons/fit-page.svg"
+                            iconSize: 14
+                            active: backend.fitMode === 2
+                            tooltipText: qsTr("Fit to Page (P)")
+                            onClicked: backend.fitToPage(flickable.width, flickable.height)
+                        }
                     }
                 }
 
                 Item { Layout.fillWidth: true } // Spacer
 
-                // Right Toolbar Controls
+                // Group 3: Tools & App Actions
                 RowLayout {
                     spacing: 4
 
-                    // Zoom Pill Group
-                    Rectangle {
+                    // Search Trigger
+                    IconButton {
+                        iconSource: "qrc:/icons/search.svg"
                         visible: backend.hasDocument
-                        implicitHeight: 30
-                        implicitWidth: zoomRow.implicitWidth + 8
-                        radius: 15
-                        color: "#1c1e27"
-                        border.color: "#2b2e3c"
-                        border.width: 1
-
-                        RowLayout {
-                            id: zoomRow
-                            anchors.centerIn: parent
-                            spacing: 2
-
-                            IconButton {
-                                iconText: "−"
-                                implicitWidth: 26
-                                implicitHeight: 26
-                                tooltipText: qsTr("Zoom Out (-)")
-                                onClicked: backend.zoomOut()
-                            }
-
-                            Text {
-                                text: Math.round(backend.zoom * 100) + "%"
-                                font.pixelSize: 11
-                                font.weight: Font.Medium
-                                color: "#c0c4d2"
-                                Layout.minimumWidth: 38
-                                horizontalAlignment: Text.AlignHCenter
-                            }
-
-                            IconButton {
-                                iconText: "+"
-                                implicitWidth: 26
-                                implicitHeight: 26
-                                tooltipText: qsTr("Zoom In (+)")
-                                onClicked: backend.zoomIn()
-                            }
+                        active: floatingSearch.visible
+                        tooltipText: qsTr("Find in Document (/)")
+                        onClicked: {
+                            if (floatingSearch.visible) floatingSearch.closeSearch();
+                            else floatingSearch.openSearch();
                         }
-                    }
-
-                    // Fit to Width
-                    IconButton {
-                        iconText: "⇥"
-                        visible: backend.hasDocument
-                        active: backend.fitMode === 1
-                        tooltipText: qsTr("Fit to Width (W)")
-                        onClicked: backend.fitToWidth(flickable.width)
-                    }
-
-                    // Fit to Page
-                    IconButton {
-                        iconText: "↕"
-                        visible: backend.hasDocument
-                        active: backend.fitMode === 2
-                        tooltipText: qsTr("Fit to Page (P)")
-                        onClicked: backend.fitToPage(flickable.width, flickable.height)
                     }
 
                     // Rotate
                     IconButton {
-                        iconText: "↻"
+                        iconSource: "qrc:/icons/rotate.svg"
                         visible: backend.hasDocument
-                        tooltipText: qsTr("Rotate (R)")
+                        tooltipText: qsTr("Rotate 90° (R)")
                         onClicked: backend.rotateClockwise()
                     }
 
                     // Night Mode
                     IconButton {
-                        iconText: backend.darkMode ? "☀️" : "🌙"
+                        iconSource: backend.darkMode ? "qrc:/icons/sun.svg" : "qrc:/icons/moon.svg"
                         visible: backend.hasDocument
                         active: backend.darkMode
                         tooltipText: qsTr("Night Reading Mode (D)")
                         onClicked: backend.toggleDarkMode()
                     }
 
-                    // Search Toggle
+                    // More Menu Button
                     IconButton {
-                        iconText: "🔍"
-                        visible: backend.hasDocument
-                        active: searchBar.visible
-                        tooltipText: qsTr("Search (/)")
-                        onClicked: {
-                            searchBar.visible = !searchBar.visible;
-                            if (searchBar.visible) searchInput.forceActiveFocus();
-                        }
-                    }
+                        id: moreBtn
+                        iconSource: "qrc:/icons/dots-vertical.svg"
+                        tooltipText: qsTr("More Options")
+                        onClicked: moreMenu.open()
 
-                    // Help
-                    IconButton {
-                        iconText: "?"
-                        active: backend.helpVisible
-                        tooltipText: qsTr("Shortcuts (?)")
-                        onClicked: backend.toggleHelp()
-                    }
+                        Menu {
+                            id: moreMenu
+                            y: moreBtn.height + 4
+                            Material.theme: Material.Dark
 
-                    // Open Button
-                    Rectangle {
-                        implicitHeight: 32
-                        implicitWidth: openBtnRow.implicitWidth + 20
-                        radius: 16
-                        color: openMouseArea.containsPress ? "#282a36"
-                             : openMouseArea.containsMouse ? "#20232e"
-                             : "#181a22"
-                        border.color: theme.accent
-                        border.width: 1
-
-                        RowLayout {
-                            id: openBtnRow
-                            anchors.centerIn: parent
-                            spacing: 6
-
-                            Text {
-                                text: "📂"
-                                font.pixelSize: 12
+                            MenuItem {
+                                text: qsTr("Keyboard Shortcuts (?)")
+                                onTriggered: backend.toggleHelp()
                             }
-
-                            Text {
-                                text: qsTr("Open")
-                                font.pixelSize: 12
-                                font.weight: Font.SemiBold
-                                color: "#ffffff"
+                            MenuItem {
+                                text: qsTr("Rotate Clockwise (R)")
+                                enabled: backend.hasDocument
+                                onTriggered: backend.rotateClockwise()
+                            }
+                            MenuItem {
+                                text: qsTr("Reset Zoom (0)")
+                                enabled: backend.hasDocument
+                                onTriggered: backend.resetZoom()
+                            }
+                            MenuSeparator {}
+                            MenuItem {
+                                text: qsTr("Close Document")
+                                enabled: backend.hasDocument
+                                onTriggered: backend.closeDocument()
+                            }
+                            MenuItem {
+                                text: qsTr("Quit (Q)")
+                                onTriggered: Qt.quit()
                             }
                         }
-
-                        MouseArea {
-                            id: openMouseArea
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: backend.openPortal()
-                        }
                     }
-                }
-            }
-        }
 
-        // Inline Search Drawer
-        Rectangle {
-            id: searchBar
-            Layout.fillWidth: true
-            height: visible ? 46 : 0
-            visible: false
-            color: "#181922"
-            clip: true
-
-            Behavior on height {
-                NumberAnimation { duration: 150; easing.type: Easing.InOutQuad }
-            }
-
-            Rectangle {
-                anchors.bottom: parent.bottom
-                width: parent.width
-                height: 1
-                color: "#272a38"
-            }
-
-            RowLayout {
-                anchors.fill: parent
-                anchors.leftMargin: 20
-                anchors.rightMargin: 20
-                spacing: 10
-
-                Text {
-                    text: "🔍"
-                    font.pixelSize: 14
-                }
-
-                TextField {
-                    id: searchInput
-                    placeholderText: qsTr("Search text in document...")
-                    placeholderTextColor: "#63697e"
-                    color: "#ffffff"
-                    font.pixelSize: 13
-                    Layout.fillWidth: true
-                    background: Item {}
-                    onTextChanged: backend.search(text)
-                    onAccepted: backend.nextSearchResult()
-                }
-
-                PillBadge {
-                    visible: backend.searchQuery.length > 0
-                    text: backend.searchResultsCount > 0
-                        ? qsTr("%1 of %2").arg(backend.searchCurrentIndex + 1).arg(backend.searchResultsCount)
-                        : qsTr("No matches")
-                    isAccent: backend.searchResultsCount > 0
-                }
-
-                IconButton {
-                    iconText: "↑"
-                    implicitWidth: 30
-                    implicitHeight: 30
-                    tooltipText: qsTr("Previous match (Shift+N)")
-                    enabled: backend.searchResultsCount > 0
-                    onClicked: backend.prevSearchResult()
-                }
-
-                IconButton {
-                    iconText: "↓"
-                    implicitWidth: 30
-                    implicitHeight: 30
-                    tooltipText: qsTr("Next match (N)")
-                    enabled: backend.searchResultsCount > 0
-                    onClicked: backend.nextSearchResult()
-                }
-
-                IconButton {
-                    iconText: "✕"
-                    implicitWidth: 30
-                    implicitHeight: 30
-                    tooltipText: qsTr("Close Search (Esc)")
-                    onClicked: {
-                        searchBar.visible = false;
-                        backend.clearSearch();
+                    // Open Document Button
+                    IconButton {
+                        iconSource: "qrc:/icons/folder.svg"
+                        text: qsTr("Open")
+                        highlighted: !backend.hasDocument
+                        tooltipText: qsTr("Open File (Ctrl+O)")
+                        onClicked: backend.openPortal()
                     }
                 }
             }
@@ -419,19 +336,19 @@ ApplicationWindow {
                 id: tocSidebar
                 Layout.preferredWidth: (backend.hasDocument && backend.tocVisible && backend.toc.length > 0) ? 280 : 0
                 Layout.fillHeight: true
-                color: "#13141b"
+                color: "#111218"
                 clip: true
                 visible: Layout.preferredWidth > 0
 
                 Behavior on Layout.preferredWidth {
-                    NumberAnimation { duration: 180; easing.type: Easing.InOutQuad }
+                    NumberAnimation { duration: 160; easing.type: Easing.InOutQuad }
                 }
 
                 Rectangle {
                     anchors.right: parent.right
                     width: 1
                     height: parent.height
-                    color: "#21232d"
+                    color: "#1c1e28"
                 }
 
                 ColumnLayout {
@@ -441,24 +358,25 @@ ApplicationWindow {
                     // Sidebar Header
                     Rectangle {
                         Layout.fillWidth: true
-                        height: 44
-                        color: "#161822"
+                        height: 40
+                        color: "#14151e"
 
                         RowLayout {
                             anchors.fill: parent
                             anchors.leftMargin: 14
-                            anchors.rightMargin: 10
+                            anchors.rightMargin: 8
 
                             Text {
-                                text: qsTr("Outline")
+                                text: qsTr("Table of Contents")
                                 font.pixelSize: 12
                                 font.weight: Font.Bold
-                                color: "#d1d5db"
+                                color: "#9ca3af"
                                 Layout.fillWidth: true
                             }
 
                             IconButton {
-                                iconText: "✕"
+                                iconSource: "qrc:/icons/close.svg"
+                                iconSize: 14
                                 implicitWidth: 26
                                 implicitHeight: 26
                                 onClicked: backend.toggleToc()
@@ -480,7 +398,7 @@ ApplicationWindow {
                             height: 32
                             x: 6
                             radius: 6
-                            color: tocMouse.containsMouse ? "#21232e" : "transparent"
+                            color: tocMouse.containsMouse ? "#1c1e29" : "transparent"
 
                             RowLayout {
                                 anchors.fill: parent
@@ -516,28 +434,28 @@ ApplicationWindow {
                 }
             }
 
-            // Viewport & Empty State
+            // Document Viewport Container
             Item {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
 
-                // Beautiful Welcoming Empty State
+                // Minimalist Empty State (Zero Emojis)
                 Item {
                     anchors.fill: parent
                     visible: !backend.hasDocument
 
                     ColumnLayout {
                         anchors.centerIn: parent
-                        width: Math.min(parent.width - 40, 520)
-                        spacing: 24
+                        width: Math.min(parent.width - 48, 520)
+                        spacing: 20
 
                         // Dropzone Card
                         Rectangle {
                             Layout.fillWidth: true
-                            height: 240
-                            radius: 16
-                            color: dropArea.containsDrag ? "#1d202b" : "#14151d"
-                            border.color: dropArea.containsDrag ? theme.accent : "#252834"
+                            height: 220
+                            radius: 14
+                            color: dropArea.containsDrag ? "#1b1d28" : "#12141c"
+                            border.color: dropArea.containsDrag ? theme.accent : "#222533"
                             border.width: dropArea.containsDrag ? 2 : 1
 
                             Behavior on color { ColorAnimation { duration: 150 } }
@@ -547,18 +465,18 @@ ApplicationWindow {
                                 anchors.centerIn: parent
                                 spacing: 14
 
-                                // Large Document Icon
                                 Rectangle {
-                                    width: 64
-                                    height: 64
-                                    radius: 18
-                                    color: "#212430"
+                                    width: 56
+                                    height: 56
+                                    radius: 16
+                                    color: "#1c1e2a"
                                     Layout.alignment: Qt.AlignHCenter
 
-                                    Text {
+                                    Image {
                                         anchors.centerIn: parent
-                                        text: "📄"
-                                        font.pixelSize: 30
+                                        source: "qrc:/icons/document.svg"
+                                        width: 26
+                                        height: 26
                                     }
                                 }
 
@@ -567,42 +485,27 @@ ApplicationWindow {
                                     Layout.alignment: Qt.AlignHCenter
 
                                     Text {
-                                        text: qsTr("Drop a PDF here to begin")
-                                        font.pixelSize: 18
+                                        text: qsTr("Drop PDF file here")
+                                        font.pixelSize: 17
                                         font.weight: Font.Bold
                                         color: "#ffffff"
                                         Layout.alignment: Qt.AlignHCenter
                                     }
 
                                     Text {
-                                        text: qsTr("or select a document from your system")
+                                        text: qsTr("or select a document from your files")
                                         font.pixelSize: 13
-                                        color: "#787e91"
+                                        color: "#717789"
                                         Layout.alignment: Qt.AlignHCenter
                                     }
                                 }
 
-                                // Open Button
-                                Rectangle {
-                                    implicitWidth: 160
-                                    implicitHeight: 40
-                                    radius: 20
-                                    color: theme.accent
+                                IconButton {
+                                    iconSource: "qrc:/icons/folder.svg"
+                                    text: qsTr("Browse Files (Ctrl+O)")
+                                    highlighted: true
                                     Layout.alignment: Qt.AlignHCenter
-
-                                    Text {
-                                        anchors.centerIn: parent
-                                        text: qsTr("Choose File (Ctrl+O)")
-                                        font.pixelSize: 13
-                                        font.weight: Font.SemiBold
-                                        color: theme.accentForeground
-                                    }
-
-                                    MouseArea {
-                                        anchors.fill: parent
-                                        cursorShape: Qt.PointingHandCursor
-                                        onClicked: backend.openPortal()
-                                    }
+                                    onClicked: backend.openPortal()
                                 }
                             }
                         }
@@ -610,33 +513,34 @@ ApplicationWindow {
                         // Recent Files Card
                         Rectangle {
                             Layout.fillWidth: true
-                            height: recentList.count > 0 ? Math.min(recentList.count * 38 + 48, 180) : 0
+                            height: recentList.count > 0 ? Math.min(recentList.count * 36 + 44, 180) : 0
                             visible: recentList.count > 0
                             radius: 12
-                            color: "#14151d"
-                            border.color: "#222530"
+                            color: "#12141c"
+                            border.color: "#1f222e"
                             border.width: 1
                             clip: true
 
                             ColumnLayout {
                                 anchors.fill: parent
                                 anchors.margins: 10
-                                spacing: 6
+                                spacing: 4
 
                                 RowLayout {
                                     Layout.fillWidth: true
                                     Text {
                                         text: qsTr("Recent Documents")
-                                        font.pixelSize: 12
+                                        font.pixelSize: 11
                                         font.weight: Font.Bold
-                                        color: "#9ca3af"
+                                        color: "#8b92a4"
                                         Layout.fillWidth: true
                                     }
                                     IconButton {
-                                        iconText: "✕"
+                                        iconSource: "qrc:/icons/close.svg"
+                                        iconSize: 12
                                         implicitWidth: 20
                                         implicitHeight: 20
-                                        tooltipText: qsTr("Clear Recents")
+                                        tooltipText: qsTr("Clear Recent Files")
                                         onClicked: backend.clearRecents()
                                     }
                                 }
@@ -651,9 +555,9 @@ ApplicationWindow {
 
                                     delegate: Rectangle {
                                         width: ListView.view.width
-                                        height: 32
+                                        height: 30
                                         radius: 6
-                                        color: recentItemMouse.containsMouse ? "#212430" : "transparent"
+                                        color: recentItemMouse.containsMouse ? "#1c1e29" : "transparent"
 
                                         RowLayout {
                                             anchors.fill: parent
@@ -661,9 +565,10 @@ ApplicationWindow {
                                             anchors.rightMargin: 8
                                             spacing: 8
 
-                                            Text {
-                                                text: "📄"
-                                                font.pixelSize: 11
+                                            Image {
+                                                source: "qrc:/icons/document.svg"
+                                                width: 13
+                                                height: 13
                                             }
 
                                             Text {
@@ -687,10 +592,10 @@ ApplicationWindow {
                             }
                         }
 
-                        // Quick Keyboard Tips
+                        // Shortcuts Quick Reference
                         Row {
                             Layout.alignment: Qt.AlignHCenter
-                            spacing: 12
+                            spacing: 10
 
                             PillBadge { text: "Space: Next Page" }
                             PillBadge { text: "D: Night Mode" }
@@ -700,13 +605,13 @@ ApplicationWindow {
                     }
                 }
 
-                // Document Viewer Canvas
+                // Document Canvas Viewport
                 Flickable {
                     id: flickable
                     anchors.fill: parent
                     visible: backend.hasDocument
-                    contentWidth: Math.max(width, pagePaper.width + 80)
-                    contentHeight: Math.max(height, pagePaper.height + 80)
+                    contentWidth: Math.max(width, pagePaper.width + 64)
+                    contentHeight: Math.max(height, pagePaper.height + 64)
                     clip: true
                     boundsBehavior: Flickable.StopAtBounds
 
@@ -717,17 +622,15 @@ ApplicationWindow {
                         width: flickable.contentWidth
                         height: flickable.contentHeight
 
-                        // Realistic Paper Sheet with Soft Shadow
+                        // Realistic Paper Sheet Canvas
                         Rectangle {
                             id: pagePaper
                             anchors.centerIn: parent
                             width: docImage.width
                             height: docImage.height
-                            radius: 4
-                            color: backend.darkMode ? "#14151b" : "#ffffff"
-
-                            // Simulated realistic drop shadow
-                            border.color: backend.darkMode ? "#2b2e3e" : "#00000030"
+                            radius: 3
+                            color: backend.darkMode ? "#12141a" : "#ffffff"
+                            border.color: backend.darkMode ? "#2a2d3e" : "#00000030"
                             border.width: 1
 
                             Image {
@@ -751,10 +654,98 @@ ApplicationWindow {
                     }
                 }
 
+                // Modern Floating Search HUD (Top-Right of Viewport)
+                Rectangle {
+                    id: floatingSearch
+                    anchors.top: parent.top
+                    anchors.topMargin: 12
+                    anchors.right: parent.right
+                    anchors.rightMargin: 16
+                    width: 360
+                    height: 42
+                    radius: 21
+                    color: "#161823"
+                    border.color: "#2a2d3e"
+                    border.width: 1
+                    visible: false
+
+                    function openSearch() {
+                        visible = true;
+                        searchField.forceActiveFocus();
+                    }
+
+                    function closeSearch() {
+                        visible = false;
+                        backend.clearSearch();
+                    }
+
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 12
+                        anchors.rightMargin: 10
+                        spacing: 8
+
+                        Image {
+                            source: "qrc:/icons/search.svg"
+                            width: 15
+                            height: 15
+                        }
+
+                        TextField {
+                            id: searchField
+                            placeholderText: qsTr("Find in document...")
+                            placeholderTextColor: "#61677c"
+                            color: "#ffffff"
+                            font.pixelSize: 12
+                            Layout.fillWidth: true
+                            background: Item {}
+                            onTextChanged: backend.search(text)
+                            onAccepted: backend.nextSearchResult()
+                        }
+
+                        PillBadge {
+                            visible: backend.searchQuery.length > 0
+                            text: backend.searchResultsCount > 0
+                                ? qsTr("%1 of %2").arg(backend.searchCurrentIndex + 1).arg(backend.searchResultsCount)
+                                : qsTr("0 matches")
+                            isAccent: backend.searchResultsCount > 0
+                        }
+
+                        IconButton {
+                            iconSource: "qrc:/icons/arrow-up.svg"
+                            iconSize: 14
+                            implicitWidth: 26
+                            implicitHeight: 26
+                            tooltipText: qsTr("Previous match (Shift+N)")
+                            enabled: backend.searchResultsCount > 0
+                            onClicked: backend.prevSearchResult()
+                        }
+
+                        IconButton {
+                            iconSource: "qrc:/icons/arrow-down.svg"
+                            iconSize: 14
+                            implicitWidth: 26
+                            implicitHeight: 26
+                            tooltipText: qsTr("Next match (N)")
+                            enabled: backend.searchResultsCount > 0
+                            onClicked: backend.nextSearchResult()
+                        }
+
+                        IconButton {
+                            iconSource: "qrc:/icons/close.svg"
+                            iconSize: 14
+                            implicitWidth: 26
+                            implicitHeight: 26
+                            tooltipText: qsTr("Close Search (Esc)")
+                            onClicked: floatingSearch.closeSearch()
+                        }
+                    }
+                }
+
                 // Floating Scrubber HUD at Bottom
                 PageScrubber {
                     anchors.bottom: parent.bottom
-                    anchors.bottomMargin: 24
+                    anchors.bottomMargin: 20
                     anchors.horizontalCenter: parent.horizontalCenter
                     visible: backend.hasDocument && backend.pageCount > 1
                     currentPage: backend.currentPage
@@ -762,7 +753,7 @@ ApplicationWindow {
                     onJumpToPage: (p) => backend.goToPage(p)
                 }
 
-                // Drop Area for drag-and-drop support
+                // Drag and drop receiver
                 DropArea {
                     id: dropArea
                     anchors.fill: parent
@@ -790,29 +781,30 @@ ApplicationWindow {
 
         Rectangle {
             anchors.centerIn: parent
-            width: 520
-            height: 440
+            width: 500
+            height: 420
             radius: Math.max(8, theme.radius)
-            color: "#161822"
+            color: "#151722"
             border.color: "#282c3c"
             border.width: 1
 
             ColumnLayout {
                 anchors.fill: parent
-                anchors.margins: 24
-                spacing: 16
+                anchors.margins: 22
+                spacing: 14
 
                 RowLayout {
                     Layout.fillWidth: true
                     Text {
                         text: qsTr("Keyboard Shortcuts")
-                        font.pixelSize: 18
+                        font.pixelSize: 17
                         font.weight: Font.Bold
                         color: "#ffffff"
                         Layout.fillWidth: true
                     }
                     IconButton {
-                        iconText: "✕"
+                        iconSource: "qrc:/icons/close.svg"
+                        iconSize: 15
                         implicitWidth: 28
                         implicitHeight: 28
                         onClicked: backend.helpVisible = false
@@ -821,8 +813,8 @@ ApplicationWindow {
 
                 GridLayout {
                     columns: 2
-                    rowSpacing: 8
-                    columnSpacing: 28
+                    rowSpacing: 7
+                    columnSpacing: 24
                     Layout.fillWidth: true
 
                     Row {
@@ -831,7 +823,7 @@ ApplicationWindow {
                         PillBadge { text: "Space" }
                         PillBadge { text: "PgDn" }
                     }
-                    Text { text: qsTr("Next page"); color: "#e5e7eb"; font.pixelSize: 13 }
+                    Text { text: qsTr("Next page"); color: "#e5e7eb"; font.pixelSize: 12 }
 
                     Row {
                         spacing: 4
@@ -839,14 +831,14 @@ ApplicationWindow {
                         PillBadge { text: "Shift+Space" }
                         PillBadge { text: "PgUp" }
                     }
-                    Text { text: qsTr("Previous page"); color: "#e5e7eb"; font.pixelSize: 13 }
+                    Text { text: qsTr("Previous page"); color: "#e5e7eb"; font.pixelSize: 12 }
 
                     Row {
                         spacing: 4
                         PillBadge { text: "Home" }
                         PillBadge { text: "End" }
                     }
-                    Text { text: qsTr("First / Last page"); color: "#e5e7eb"; font.pixelSize: 13 }
+                    Text { text: qsTr("First / Last page"); color: "#e5e7eb"; font.pixelSize: 12 }
 
                     Row {
                         spacing: 4
@@ -854,47 +846,47 @@ ApplicationWindow {
                         PillBadge { text: "−" }
                         PillBadge { text: "0" }
                     }
-                    Text { text: qsTr("Zoom In / Out / Reset"); color: "#e5e7eb"; font.pixelSize: 13 }
+                    Text { text: qsTr("Zoom In / Out / Reset"); color: "#e5e7eb"; font.pixelSize: 12 }
 
                     Row {
                         spacing: 4
                         PillBadge { text: "W" }
                         PillBadge { text: "P" }
                     }
-                    Text { text: qsTr("Fit to Width / Page"); color: "#e5e7eb"; font.pixelSize: 13 }
+                    Text { text: qsTr("Fit to Width / Page"); color: "#e5e7eb"; font.pixelSize: 12 }
 
                     PillBadge { text: "R"; isAccent: true }
-                    Text { text: qsTr("Rotate 90 degrees"); color: "#e5e7eb"; font.pixelSize: 13 }
+                    Text { text: qsTr("Rotate 90 degrees"); color: "#e5e7eb"; font.pixelSize: 12 }
 
                     PillBadge { text: "D"; isAccent: true }
-                    Text { text: qsTr("Night reading mode"); color: "#e5e7eb"; font.pixelSize: 13 }
+                    Text { text: qsTr("Night reading mode"); color: "#e5e7eb"; font.pixelSize: 12 }
 
                     PillBadge { text: "T"; isAccent: true }
-                    Text { text: qsTr("Toggle Table of Contents"); color: "#e5e7eb"; font.pixelSize: 13 }
+                    Text { text: qsTr("Toggle Table of Contents"); color: "#e5e7eb"; font.pixelSize: 12 }
 
                     PillBadge { text: "/"; isAccent: true }
-                    Text { text: qsTr("Search in document"); color: "#e5e7eb"; font.pixelSize: 13 }
+                    Text { text: qsTr("Search in document"); color: "#e5e7eb"; font.pixelSize: 12 }
 
                     Row {
                         spacing: 4
                         PillBadge { text: "N" }
                         PillBadge { text: "Shift+N" }
                     }
-                    Text { text: qsTr("Next / Previous match"); color: "#e5e7eb"; font.pixelSize: 13 }
+                    Text { text: qsTr("Next / Previous match"); color: "#e5e7eb"; font.pixelSize: 12 }
 
                     Row {
                         spacing: 4
                         PillBadge { text: "O" }
                         PillBadge { text: "Ctrl+O" }
                     }
-                    Text { text: qsTr("Open file dialog"); color: "#e5e7eb"; font.pixelSize: 13 }
+                    Text { text: qsTr("Open file dialog"); color: "#e5e7eb"; font.pixelSize: 12 }
 
                     Row {
                         spacing: 4
                         PillBadge { text: "Q" }
                         PillBadge { text: "Esc" }
                     }
-                    Text { text: qsTr("Quit / Close overlay"); color: "#e5e7eb"; font.pixelSize: 13 }
+                    Text { text: qsTr("Quit / Close overlay"); color: "#e5e7eb"; font.pixelSize: 12 }
                 }
             }
         }

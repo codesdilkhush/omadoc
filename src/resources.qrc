@@ -4,6 +4,23 @@
         <file alias="IconButton.qml">IconButton.qml</file>
         <file alias="PillBadge.qml">PillBadge.qml</file>
         <file alias="PageScrubber.qml">PageScrubber.qml</file>
+        <file alias="icons/sidebar.svg">icons/sidebar.svg</file>
+        <file alias="icons/search.svg">icons/search.svg</file>
+        <file alias="icons/chevron-left.svg">icons/chevron-left.svg</file>
+        <file alias="icons/chevron-right.svg">icons/chevron-right.svg</file>
+        <file alias="icons/zoom-in.svg">icons/zoom-in.svg</file>
+        <file alias="icons/zoom-out.svg">icons/zoom-out.svg</file>
+        <file alias="icons/fit-width.svg">icons/fit-width.svg</file>
+        <file alias="icons/fit-page.svg">icons/fit-page.svg</file>
+        <file alias="icons/rotate.svg">icons/rotate.svg</file>
+        <file alias="icons/moon.svg">icons/moon.svg</file>
+        <file alias="icons/sun.svg">icons/sun.svg</file>
+        <file alias="icons/folder.svg">icons/folder.svg</file>
+        <file alias="icons/close.svg">icons/close.svg</file>
+        <file alias="icons/arrow-up.svg">icons/arrow-up.svg</file>
+        <file alias="icons/arrow-down.svg">icons/arrow-down.svg</file>
+        <file alias="icons/document.svg">icons/document.svg</file>
+        <file alias="icons/dots-vertical.svg">icons/dots-vertical.svg</file>
         <file alias="i18n/en.json">i18n/en.json</file>
         <file alias="i18n/da.json">i18n/da.json</file>
     </qresource>

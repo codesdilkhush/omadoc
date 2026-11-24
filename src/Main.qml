@@ -82,8 +82,14 @@ ApplicationWindow {
             height: 48
             color: "#12131a"
 
-            TapHandler {
-                onTapped: windowFocusTarget.forceActiveFocus()
+            MouseArea {
+                anchors.fill: parent
+                z: -1
+                onPressed: (mouse) => {
+                    zoomInput.focus = false;
+                    flickable.forceActiveFocus();
+                    mouse.accepted = false;
+                }
             }
 
             Rectangle {
@@ -212,7 +218,7 @@ ApplicationWindow {
 
                         Rectangle {
                             id: zoomBox
-                            Layout.preferredWidth: 48
+                            Layout.preferredWidth: 54
                             Layout.preferredHeight: 24
                             radius: 4
                             color: zoomInput.activeFocus ? "#181a24" : (zoomHover.hovered ? "#1c1e2a" : "transparent")
@@ -223,50 +229,66 @@ ApplicationWindow {
                                 id: zoomHover
                             }
 
-                            TextInput {
-                                id: zoomInput
-                                anchors.fill: parent
-                                anchors.margins: 2
-                                horizontalAlignment: TextInput.AlignHCenter
-                                verticalAlignment: TextInput.AlignVCenter
-                                font.pixelSize: 11
-                                font.weight: Font.Medium
-                                color: zoomInput.activeFocus ? "#ffffff" : "#b0b5c4"
-                                selectionColor: theme.accent
-                                selectedTextColor: theme.accentForeground
-                                selectByMouse: true
-                                activeFocusOnTab: true
-                                clip: true
+                            RowLayout {
+                                anchors.centerIn: parent
+                                spacing: 1
 
-                                text: Math.round(backend.zoom * 100) + "%"
+                                TextInput {
+                                    id: zoomInput
+                                    text: Math.round(backend.zoom * 100).toString()
+                                    font.pixelSize: 11
+                                    font.weight: Font.Medium
+                                    color: zoomInput.activeFocus ? "#ffffff" : "#b0b5c4"
+                                    selectionColor: theme.accent
+                                    selectedTextColor: theme.accentForeground
+                                    selectByMouse: true
+                                    activeFocusOnTab: true
+                                    horizontalAlignment: TextInput.AlignRight
+                                    verticalAlignment: TextInput.AlignVCenter
+                                    Layout.preferredWidth: Math.max(22, contentWidth)
+                                    clip: true
 
-                                function commitZoom() {
-                                    var clean = text.replace(/[^0-9.]/g, "");
-                                    var val = parseFloat(clean);
-                                    if (!isNaN(val) && val >= 10 && val <= 1000) {
-                                        backend.setZoom(val / 100.0);
+                                    function commitZoom() {
+                                        var clean = text.replace(/[^0-9]/g, "");
+                                        var val = parseInt(clean);
+                                        if (!isNaN(val) && val >= 10 && val <= 1000) {
+                                            backend.setZoom(val / 100.0);
+                                        }
+                                        text = Math.round(backend.zoom * 100).toString();
+                                        if (activeFocus) {
+                                            flickable.forceActiveFocus();
+                                        }
                                     }
-                                    text = Math.round(backend.zoom * 100) + "%";
-                                    if (activeFocus) {
-                                        windowFocusTarget.forceActiveFocus();
+
+                                    onAccepted: commitZoom()
+
+                                    Keys.onEscapePressed: {
+                                        text = Math.round(backend.zoom * 100).toString();
+                                        flickable.forceActiveFocus();
+                                    }
+
+                                    onActiveFocusChanged: {
+                                        if (activeFocus) {
+                                            selectAll();
+                                        } else {
+                                            commitZoom();
+                                        }
+                                    }
+
+                                    onTextChanged: {
+                                        if (text.indexOf("%") !== -1 || /[^0-9]/.test(text)) {
+                                            var digits = text.replace(/[^0-9]/g, "");
+                                            if (digits !== text) text = digits;
+                                        }
                                     }
                                 }
 
-                                onAccepted: commitZoom()
-
-                                Keys.onEscapePressed: {
-                                    text = Math.round(backend.zoom * 100) + "%";
-                                    windowFocusTarget.forceActiveFocus();
-                                }
-
-                                onActiveFocusChanged: {
-                                    if (activeFocus) {
-                                        var clean = text.replace("%", "").trim();
-                                        text = clean;
-                                        selectAll();
-                                    } else {
-                                        commitZoom();
-                                    }
+                                Text {
+                                    text: "%"
+                                    font.pixelSize: 11
+                                    font.weight: Font.Medium
+                                    color: zoomInput.activeFocus ? theme.accent : "#717789"
+                                    verticalAlignment: Text.AlignVCenter
                                 }
                             }
 
@@ -274,7 +296,7 @@ ApplicationWindow {
                                 target: backend
                                 function onZoomChanged() {
                                     if (!zoomInput.activeFocus) {
-                                        zoomInput.text = Math.round(backend.zoom * 100) + "%";
+                                        zoomInput.text = Math.round(backend.zoom * 100).toString();
                                     }
                                 }
                             }
@@ -517,8 +539,14 @@ ApplicationWindow {
                     anchors.fill: parent
                     visible: !backend.hasDocument
 
-                    TapHandler {
-                        onTapped: windowFocusTarget.forceActiveFocus()
+                    MouseArea {
+                        anchors.fill: parent
+                        z: -1
+                        onPressed: (mouse) => {
+                            zoomInput.focus = false;
+                            flickable.forceActiveFocus();
+                            mouse.accepted = false;
+                        }
                     }
 
                     ColumnLayout {
@@ -685,6 +713,7 @@ ApplicationWindow {
                 // Document Canvas Viewport
                 Flickable {
                     id: flickable
+                    focus: true
                     anchors.fill: parent
                     visible: backend.hasDocument
                     contentWidth: Math.max(width, pagePaper.width + 64)
@@ -692,8 +721,14 @@ ApplicationWindow {
                     clip: true
                     boundsBehavior: Flickable.StopAtBounds
 
-                    TapHandler {
-                        onTapped: windowFocusTarget.forceActiveFocus()
+                    MouseArea {
+                        anchors.fill: parent
+                        z: -1
+                        onPressed: (mouse) => {
+                            zoomInput.focus = false;
+                            flickable.forceActiveFocus();
+                            mouse.accepted = false;
+                        }
                     }
 
                     onWidthChanged: {
@@ -732,6 +767,16 @@ ApplicationWindow {
                             color: backend.darkMode ? "#12141a" : "#ffffff"
                             border.color: backend.darkMode ? "#2a2d3e" : "#00000030"
                             border.width: 1
+
+                            MouseArea {
+                                anchors.fill: parent
+                                z: -1
+                                onPressed: (mouse) => {
+                                    zoomInput.focus = false;
+                                    flickable.forceActiveFocus();
+                                    mouse.accepted = false;
+                                }
+                            }
 
                             Image {
                                 id: docImage

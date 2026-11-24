@@ -1,6 +1,8 @@
 #ifndef OMADOC_DOCUMENTENGINE_H
 #define OMADOC_DOCUMENTENGINE_H
 
+#include "documentbackend.h"
+
 #include <QObject>
 #include <QString>
 #include <QImage>
@@ -9,10 +11,6 @@
 #include <QVariantList>
 #include <memory>
 #include <mutex>
-
-namespace poppler {
-class document;
-}
 
 class DocumentEngine : public QObject {
     Q_OBJECT
@@ -42,7 +40,7 @@ signals:
 
 private:
     QString m_filePath;
-    std::unique_ptr<poppler::document> m_doc;
+    std::unique_ptr<IDocumentBackend> m_backend;
     mutable std::mutex m_mutex;
 };
 

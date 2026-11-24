@@ -4,12 +4,58 @@
 #include <QDir>
 #include <QPdfWriter>
 #include <QPainter>
+#include <QBuffer>
+#include <archive.h>
+#include <archive_entry.h>
 
 #include "backend.h"
 #include "documentengine.h"
 #include "pageimageprovider.h"
 #include "theme.h"
 #include "translator.h"
+
+namespace {
+
+struct TestEntry {
+    QString name;
+    QByteArray data;
+};
+
+void createZipArchive(const QString &zipPath, const QList<TestEntry> &entries) {
+    struct archive *a = archive_write_new();
+    archive_write_set_format_zip(a);
+    archive_write_open_filename(a, zipPath.toUtf8().constData());
+    for (const auto &item : entries) {
+        struct archive_entry *entry = archive_entry_new();
+        archive_entry_set_pathname(entry, item.name.toUtf8().constData());
+        archive_entry_set_size(entry, item.data.size());
+        archive_entry_set_filetype(entry, AE_IFREG);
+        archive_entry_set_perm(entry, 0644);
+        archive_write_header(a, entry);
+        archive_write_data(a, item.data.constData(), item.data.size());
+        archive_entry_free(entry);
+    }
+    archive_write_close(a);
+    archive_write_free(a);
+}
+
+QByteArray createTestPng(const QString &text, int width = 400, int height = 600) {
+    QImage img(width, height, QImage::Format_ARGB32);
+    img.fill(Qt::white);
+    QPainter p(&img);
+    p.setPen(Qt::black);
+    p.setFont(QFont(QStringLiteral("sans-serif"), 14));
+    p.drawText(img.rect(), Qt::AlignCenter, text);
+    p.end();
+
+    QByteArray bytes;
+    QBuffer buf(&bytes);
+    buf.open(QIODevice::WriteOnly);
+    img.save(&buf, "PNG");
+    return bytes;
+}
+
+} // anonymous namespace
 
 class OmadocTests : public QObject {
     Q_OBJECT
@@ -243,6 +289,176 @@ private slots:
         // Clear all annotations
         backend.clearAllAnnotations();
         QCOMPARE(backend.annotationCount(), 0);
+
+        backend.closeDocument();
+        QCOMPARE(backend.hasDocument(), false);
+    }
+
+    void testComicArchiveEngine() {
+        QTemporaryDir temp;
+        const QString cbzPath = temp.filePath("sample.cbz");
+
+        QList<TestEntry> entries;
+        entries.append(TestEntry{QStringLiteral("page_01.png"), createTestPng("Chapter 1: The Beginning")});
+        entries.append(TestEntry{QStringLiteral("page_02.png"), createTestPng("Chapter 1: Page 2")});
+        entries.append(TestEntry{QStringLiteral("page_10.png"), createTestPng("Chapter 1: Page 10")});
+        entries.append(TestEntry{QStringLiteral("ComicInfo.xml"), QByteArray("<ComicInfo><Title>Sample Manga</Title><Writer>Manga Artist</Writer></ComicInfo>")});
+
+        createZipArchive(cbzPath, entries);
+        QVERIFY(QFile::exists(cbzPath));
+
+        DocumentEngine engine;
+        QVERIFY(engine.load(cbzPath));
+        QCOMPARE(engine.isLoaded(), true);
+        QCOMPARE(engine.pageCount(), 3);
+        QCOMPARE(engine.title(), QStringLiteral("Sample Manga"));
+        QCOMPARE(engine.author(), QStringLiteral("Manga Artist"));
+
+        // Test page dimensions
+        QSizeF sz0 = engine.pageSize(0);
+        QVERIFY(sz0.width() > 0 && sz0.height() > 0);
+
+        // Test rendering
+        QImage p0 = engine.renderPage(0, 140.0, false, 0);
+        QVERIFY(!p0.isNull());
+        QCOMPARE(p0.width(), 400);
+        QCOMPARE(p0.height(), 600);
+
+        // Test rotation
+        QImage p0Rot = engine.renderPage(0, 140.0, false, 90);
+        QVERIFY(!p0Rot.isNull());
+        QCOMPARE(p0Rot.width(), 600);
+        QCOMPARE(p0Rot.height(), 400);
+
+        // Test dark mode
+        QImage p0Dark = engine.renderPage(0, 140.0, true, 0);
+        QVERIFY(!p0Dark.isNull());
+
+        // Test search
+        auto searchRes = engine.search("page_02");
+        QCOMPARE(searchRes.size(), 1);
+        QCOMPARE(searchRes.first(), 1);
+
+        // Test integration with Backend
+        PageImageProvider provider(&engine);
+        Backend backend(&engine, &provider);
+        backend.openFile(cbzPath);
+        QCOMPARE(backend.hasDocument(), true);
+        QCOMPARE(backend.pageCount(), 3);
+
+        // Test annotations on CBZ
+        backend.addHighlight(0, 0.1, 0.1, 0.2, 0.2, "#80deea");
+        QCOMPARE(backend.annotationCount(), 1);
+        backend.addStickyNote(0, 0.4, 0.4, "Great artwork!");
+        QCOMPARE(backend.annotationCount(), 2);
+        backend.clearAllAnnotations();
+
+        backend.closeDocument();
+        QCOMPARE(backend.hasDocument(), false);
+    }
+
+    void testEpubEngine() {
+        QTemporaryDir temp;
+        const QString epubPath = temp.filePath("sample.epub");
+
+        QList<TestEntry> entries;
+        entries.append(TestEntry{QStringLiteral("mimetype"), QByteArray("application/epub+zip")});
+        entries.append(TestEntry{QStringLiteral("META-INF/container.xml"),
+            QByteArray("<container version=\"1.0\" xmlns=\"urn:oasis:names:tc:opendocument:xmlns:container\">"
+            "  <rootfiles>"
+            "    <rootfile full-path=\"OEBPS/content.opf\" media-type=\"application/oebps-package+xml\"/>"
+            "  </rootfiles>"
+            "</container>")
+        });
+        entries.append(TestEntry{QStringLiteral("OEBPS/content.opf"),
+            QByteArray("<package version=\"2.0\" xmlns=\"http://www.idpf.org/2007/opf\">"
+            "  <metadata xmlns:dc=\"http://purl.org/dc/elements/1.1/\">"
+            "    <dc:title>Epub Adventure</dc:title>"
+            "    <dc:creator>Jane Novelist</dc:creator>"
+            "  </metadata>"
+            "  <manifest>"
+            "    <item id=\"ncx\" href=\"toc.ncx\" media-type=\"application/x-dtbncx+xml\"/>"
+            "    <item id=\"ch1\" href=\"ch1.xhtml\" media-type=\"application/xhtml+xml\"/>"
+            "    <item id=\"ch2\" href=\"ch2.xhtml\" media-type=\"application/xhtml+xml\"/>"
+            "  </manifest>"
+            "  <spine toc=\"ncx\">"
+            "    <itemref idref=\"ch1\"/>"
+            "    <itemref idref=\"ch2\"/>"
+            "  </spine>"
+            "</package>")
+        });
+        entries.append(TestEntry{QStringLiteral("OEBPS/toc.ncx"),
+            QByteArray("<ncx version=\"2005-1\" xmlns=\"http://www.daisy.org/z3986/2005/ncx/\">"
+            "  <navMap>"
+            "    <navPoint id=\"np1\" playOrder=\"1\">"
+            "      <navLabel><text>Chapter 1: The Departure</text></navLabel>"
+            "      <content src=\"ch1.xhtml\"/>"
+            "    </navPoint>"
+            "    <navPoint id=\"np2\" playOrder=\"2\">"
+            "      <navLabel><text>Chapter 2: The Arrival</text></navLabel>"
+            "      <content src=\"ch2.xhtml\"/>"
+            "    </navPoint>"
+            "  </navMap>"
+            "</ncx>")
+        });
+        entries.append(TestEntry{QStringLiteral("OEBPS/ch1.xhtml"),
+            QByteArray("<?xml version=\"1.0\" encoding=\"utf-8\"?>"
+            "<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.1//EN\" \"http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd\">"
+            "<html xmlns=\"http://www.w3.org/1999/xhtml\">"
+            "<head><title>Chapter 1</title></head>"
+            "<body><h1>Chapter 1</h1><p>It was a dark and stormy night when the adventure began.</p></body>"
+            "</html>")
+        });
+        entries.append(TestEntry{QStringLiteral("OEBPS/ch2.xhtml"),
+            QByteArray("<?xml version=\"1.0\" encoding=\"utf-8\"?>"
+            "<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.1//EN\" \"http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd\">"
+            "<html xmlns=\"http://www.w3.org/1999/xhtml\">"
+            "<head><title>Chapter 2</title></head>"
+            "<body><h1>Chapter 2</h1><p>The dawn brought new hope and clear skies across the ocean.</p></body>"
+            "</html>")
+        });
+
+        createZipArchive(epubPath, entries);
+        QVERIFY(QFile::exists(epubPath));
+
+        DocumentEngine engine;
+        QVERIFY(engine.load(epubPath));
+        QCOMPARE(engine.isLoaded(), true);
+        QVERIFY(engine.pageCount() >= 2);
+        QCOMPARE(engine.title(), QStringLiteral("Epub Adventure"));
+        QCOMPARE(engine.author(), QStringLiteral("Jane Novelist"));
+
+        // Test table of contents
+        QVariantList toc = engine.tableOfContents();
+        QCOMPARE(toc.size(), 2);
+        QCOMPARE(toc.at(0).toMap().value("title").toString(), QStringLiteral("Chapter 1: The Departure"));
+        QCOMPARE(toc.at(1).toMap().value("title").toString(), QStringLiteral("Chapter 2: The Arrival"));
+
+        // Test rendering
+        QImage p0 = engine.renderPage(0, 140.0, false, 0);
+        QVERIFY(!p0.isNull());
+        QVERIFY(p0.width() > 0 && p0.height() > 0);
+
+        // Test dark mode rendering
+        QImage p0Dark = engine.renderPage(0, 140.0, true, 0);
+        QVERIFY(!p0Dark.isNull());
+
+        // Test search
+        auto searchRes = engine.search("stormy");
+        QVERIFY(!searchRes.isEmpty());
+        QCOMPARE(searchRes.first(), 0);
+
+        // Test integration with Backend
+        PageImageProvider provider(&engine);
+        Backend backend(&engine, &provider);
+        backend.openFile(epubPath);
+        QCOMPARE(backend.hasDocument(), true);
+        QCOMPARE(backend.title(), QStringLiteral("Epub Adventure"));
+
+        // Test annotations on EPUB
+        backend.addHighlight(0, 0.1, 0.1, 0.3, 0.05, "#ffd54f");
+        QCOMPARE(backend.annotationCount(), 1);
+        backend.clearAllAnnotations();
 
         backend.closeDocument();
         QCOMPARE(backend.hasDocument(), false);

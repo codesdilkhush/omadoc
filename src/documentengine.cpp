@@ -1,16 +1,7 @@
 #include "documentengine.h"
-
-#include <poppler-document.h>
-#include <poppler-page.h>
-#include <poppler-page-renderer.h>
-#include <poppler-toc.h>
-
-#include <QFile>
-#include <QFileInfo>
-#include <QDir>
-#include <QRandomGenerator>
-
-#include <functional>
+#include "pdfbackend.h"
+#include "comicbackend.h"
+#include "epubbackend.h"
 
 DocumentEngine::DocumentEngine(QObject *parent) : QObject(parent) {}
 
@@ -20,22 +11,73 @@ DocumentEngine::~DocumentEngine() {
 
 bool DocumentEngine::load(const QString &path) {
     std::lock_guard<std::mutex> lock(m_mutex);
-    m_filePath = path;
-    m_doc.reset(poppler::document::load_from_file(path.toStdString()));
-    if (!m_doc || m_doc->is_locked()) {
-        m_doc.reset();
+    if (m_backend) {
+        m_backend->close();
+        m_backend.reset();
         m_filePath.clear();
-        emit documentClosed();
-        return false;
     }
-    emit documentLoaded();
-    return true;
+
+    const QString lower = path.toLower();
+
+    // 1. Comic / Manga Archives
+    if (lower.endsWith(QStringLiteral(".cbz")) || lower.endsWith(QStringLiteral(".cbr")) ||
+        lower.endsWith(QStringLiteral(".cbt")) || lower.endsWith(QStringLiteral(".cb7"))) {
+        auto comic = std::make_unique<ComicBackend>();
+        if (comic->load(path)) {
+            m_backend = std::move(comic);
+            m_filePath = path;
+            emit documentLoaded();
+            return true;
+        }
+    }
+
+    // 2. EPUB Ebooks
+    if (lower.endsWith(QStringLiteral(".epub"))) {
+        auto epub = std::make_unique<EpubBackend>();
+        if (epub->load(path)) {
+            m_backend = std::move(epub);
+            m_filePath = path;
+            emit documentLoaded();
+            return true;
+        }
+    }
+
+    // 3. PDF via Poppler
+    auto pdf = std::make_unique<PdfBackend>();
+    if (pdf->load(path)) {
+        m_backend = std::move(pdf);
+        m_filePath = path;
+        emit documentLoaded();
+        return true;
+    }
+
+    // 4. Fallback autodetection if extension doesn't match
+    auto epubFallback = std::make_unique<EpubBackend>();
+    if (epubFallback->load(path)) {
+        m_backend = std::move(epubFallback);
+        m_filePath = path;
+        emit documentLoaded();
+        return true;
+    }
+
+    auto comicFallback = std::make_unique<ComicBackend>();
+    if (comicFallback->load(path)) {
+        m_backend = std::move(comicFallback);
+        m_filePath = path;
+        emit documentLoaded();
+        return true;
+    }
+
+    m_filePath.clear();
+    emit documentClosed();
+    return false;
 }
 
 void DocumentEngine::close() {
     std::lock_guard<std::mutex> lock(m_mutex);
-    if (m_doc) {
-        m_doc.reset();
+    if (m_backend) {
+        m_backend->close();
+        m_backend.reset();
         m_filePath.clear();
         emit documentClosed();
     }
@@ -43,179 +85,45 @@ void DocumentEngine::close() {
 
 bool DocumentEngine::saveCopy(const QString &targetPath) {
     std::lock_guard<std::mutex> lock(m_mutex);
-    if (!m_doc || targetPath.isEmpty())
-        return false;
-
-    const QFileInfo targetInfo(targetPath);
-    QDir dir = targetInfo.absoluteDir();
-    if (!dir.exists()) {
-        dir.mkpath(QStringLiteral("."));
-    }
-
-    // Never write directly over the target file in-place because Poppler keeps
-    // the file handle open. Truncating an in-use file causes immediate corruption.
-    // Instead, save to a temporary file first and then atomically rename.
-    QString tempPath = dir.absoluteFilePath(
-        QStringLiteral(".omadoc_%1_%2.tmp")
-            .arg(QRandomGenerator::global()->generate())
-            .arg(targetInfo.fileName())
-    );
-
-    bool saved = m_doc->save_a_copy(tempPath.toStdString());
-    if (!saved || !QFile::exists(tempPath) || QFileInfo(tempPath).size() == 0) {
-        if (QFile::exists(tempPath)) QFile::remove(tempPath);
-
-        // Fallback: try system temp directory
-        tempPath = QDir::temp().absoluteFilePath(
-            QStringLiteral("omadoc_%1_%2.tmp")
-                .arg(QRandomGenerator::global()->generate())
-                .arg(targetInfo.fileName())
-        );
-        saved = m_doc->save_a_copy(tempPath.toStdString());
-        if (!saved || !QFile::exists(tempPath) || QFileInfo(tempPath).size() == 0) {
-            if (QFile::exists(tempPath)) QFile::remove(tempPath);
-            return false;
-        }
-    }
-
-    const bool isSameAsLoaded = (QFileInfo(m_filePath) == targetInfo);
-
-    if (QFile::exists(targetPath)) {
-        QFile::remove(targetPath);
-    }
-
-    bool success = QFile::rename(tempPath, targetPath);
-    if (!success) {
-        // If rename failed (e.g. across different filesystems / mounts), use copy
-        QFile::remove(targetPath);
-        success = QFile::copy(tempPath, targetPath);
-        QFile::remove(tempPath);
-    }
-
-    if (success && isSameAsLoaded) {
-        // Reload poppler document handle to point to the newly written file
-        m_doc.reset(poppler::document::load_from_file(m_filePath.toStdString()));
-    }
-
-    return success;
+    return m_backend ? m_backend->saveCopy(targetPath) : false;
 }
 
 bool DocumentEngine::isLoaded() const {
     std::lock_guard<std::mutex> lock(m_mutex);
-    return m_doc != nullptr;
+    return m_backend != nullptr && m_backend->pageCount() > 0;
 }
 
 int DocumentEngine::pageCount() const {
     std::lock_guard<std::mutex> lock(m_mutex);
-    return m_doc ? m_doc->pages() : 0;
+    return m_backend ? m_backend->pageCount() : 0;
 }
 
 QSizeF DocumentEngine::pageSize(int index) const {
     std::lock_guard<std::mutex> lock(m_mutex);
-    if (!m_doc || index < 0 || index >= m_doc->pages())
-        return QSizeF(0, 0);
-
-    std::unique_ptr<poppler::page> p(m_doc->create_page(index));
-    if (!p)
-        return QSizeF(0, 0);
-
-    const poppler::rectf rect = p->page_rect();
-    return QSizeF(rect.width(), rect.height());
+    return m_backend ? m_backend->pageSize(index) : QSizeF(0, 0);
 }
 
 QImage DocumentEngine::renderPage(int index, double dpi, bool darkMode, int rotation) {
     std::lock_guard<std::mutex> lock(m_mutex);
-    if (!m_doc || index < 0 || index >= m_doc->pages())
-        return QImage();
-
-    std::unique_ptr<poppler::page> p(m_doc->create_page(index));
-    if (!p)
-        return QImage();
-
-    poppler::page_renderer renderer;
-    renderer.set_render_hint(poppler::page_renderer::antialiasing, true);
-    renderer.set_render_hint(poppler::page_renderer::text_antialiasing, true);
-    renderer.set_render_hint(poppler::page_renderer::text_hinting, true);
-    renderer.set_image_format(poppler::image::format_argb32);
-
-    poppler::rotation_enum rot = poppler::rotate_0;
-    if (rotation == 90) rot = poppler::rotate_90;
-    else if (rotation == 180) rot = poppler::rotate_180;
-    else if (rotation == 270) rot = poppler::rotate_270;
-
-    poppler::image img = renderer.render_page(p.get(), dpi, dpi, -1, -1, -1, -1, rot);
-    if (!img.is_valid())
-        return QImage();
-
-    QImage qimg(reinterpret_cast<const uchar*>(img.const_data()),
-                img.width(), img.height(), img.bytes_per_row(),
-                QImage::Format_ARGB32);
-    QImage result = qimg.copy();
-
-    if (darkMode) {
-        result.invertPixels(QImage::InvertRgb);
-    }
-
-    return result;
+    return m_backend ? m_backend->renderPage(index, dpi, darkMode, rotation) : QImage();
 }
 
 QString DocumentEngine::title() const {
     std::lock_guard<std::mutex> lock(m_mutex);
-    if (!m_doc) return {};
-    auto s = m_doc->get_title().to_utf8();
-    return QString::fromUtf8(s.data(), s.size());
+    return m_backend ? m_backend->title() : QString();
 }
 
 QString DocumentEngine::author() const {
     std::lock_guard<std::mutex> lock(m_mutex);
-    if (!m_doc) return {};
-    auto s = m_doc->get_author().to_utf8();
-    return QString::fromUtf8(s.data(), s.size());
+    return m_backend ? m_backend->author() : QString();
 }
 
 QVariantList DocumentEngine::tableOfContents() {
     std::lock_guard<std::mutex> lock(m_mutex);
-    QVariantList items;
-    if (!m_doc) return items;
-
-    std::unique_ptr<poppler::toc> outline(m_doc->create_toc());
-    if (!outline || !outline->root())
-        return items;
-
-    std::function<void(poppler::toc_item*, int)> walk;
-    walk = [&](poppler::toc_item *node, int level) {
-        for (auto *child : node->children()) {
-            if (!child) continue;
-            auto raw = child->title().to_utf8();
-            QString heading = QString::fromUtf8(raw.data(), raw.size()).trimmed();
-            if (!heading.isEmpty()) {
-                QVariantMap row;
-                row["title"] = heading;
-                row["depth"] = level;
-                items.append(row);
-            }
-            walk(child, level + 1);
-        }
-    };
-    walk(outline->root(), 0);
-    return items;
+    return m_backend ? m_backend->tableOfContents() : QVariantList();
 }
 
 QList<int> DocumentEngine::search(const QString &query) const {
     std::lock_guard<std::mutex> lock(m_mutex);
-    QList<int> foundPages;
-    if (!m_doc || query.trimmed().isEmpty())
-        return foundPages;
-
-    const int total = m_doc->pages();
-    for (int i = 0; i < total; ++i) {
-        std::unique_ptr<poppler::page> p(m_doc->create_page(i));
-        if (!p) continue;
-        auto raw = p->text().to_utf8();
-        QString content = QString::fromUtf8(raw.data(), raw.size());
-        if (content.contains(query, Qt::CaseInsensitive)) {
-            foundPages.append(i);
-        }
-    }
-    return foundPages;
+    return m_backend ? m_backend->search(query) : QList<int>();
 }

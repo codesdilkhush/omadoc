@@ -687,7 +687,7 @@ ApplicationWindow {
                                     Layout.alignment: Qt.AlignHCenter
 
                                     Text {
-                                        text: qsTr("Drop PDF file here")
+                                        text: qsTr("Drop PDF, Manga or EPUB here")
                                         font.pixelSize: 17
                                         font.weight: Font.Bold
                                         color: "#ffffff"

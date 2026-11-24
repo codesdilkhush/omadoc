@@ -6,5 +6,5 @@ Exec=omadoc %f
 Icon=omadoc
 Terminal=false
 Categories=Office;Viewer;Graphics;
-MimeType=application/pdf;
+MimeType=application/pdf;application/epub+zip;application/x-cbr;application/x-cbz;application/x-cbt;application/x-cb7;application/vnd.comicbook+zip;application/vnd.comicbook-rar;
 StartupWMClass=omadoc

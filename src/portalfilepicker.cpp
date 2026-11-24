@@ -66,7 +66,7 @@ void PortalFilePicker::saveFile(const QString &suggestedName, const QString &tit
     options.insert(QStringLiteral("handle_token"), token);
     if (!suggestedName.isEmpty()) {
         QString name = suggestedName;
-        if (!name.endsWith(QStringLiteral(".pdf"), Qt::CaseInsensitive)) {
+        if (!name.contains('.')) {
             name += QStringLiteral(".pdf");
         }
         options.insert(QStringLiteral("current_name"), name);
@@ -122,7 +122,7 @@ void PortalFilePicker::onSaveResponse(uint response, const QVariantMap &results)
         if (!uris.isEmpty()) {
             QUrl url(uris.first());
             QString path = url.isLocalFile() ? url.toLocalFile() : uris.first();
-            if (!path.endsWith(QStringLiteral(".pdf"), Qt::CaseInsensitive)) {
+            if (!path.contains('.')) {
                 path += QStringLiteral(".pdf");
             }
             emit saveTargetSelected(path);

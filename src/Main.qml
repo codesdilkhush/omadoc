@@ -17,41 +17,46 @@ ApplicationWindow {
     Material.accent: theme.accent
     Material.roundedScale: theme.radius
 
+    // Check if user is typing in a text input field to avoid intercepting keystrokes
+    readonly property bool isInputActive: (typeof zoomInput !== "undefined" && zoomInput.activeFocus) ||
+                                          (typeof searchField !== "undefined" && searchField.activeFocus)
+
     // Application Shortcuts
-    Shortcut { sequence: "Q"; context: Qt.ApplicationShortcut; onActivated: Qt.quit() }
-    Shortcut { sequence: "?"; context: Qt.ApplicationShortcut; onActivated: backend.toggleHelp() }
-    Shortcut { sequence: "O"; context: Qt.ApplicationShortcut; onActivated: backend.openPortal() }
+    Shortcut { sequence: "Q"; enabled: !isInputActive; context: Qt.ApplicationShortcut; onActivated: Qt.quit() }
+    Shortcut { sequence: "?"; enabled: !isInputActive; context: Qt.ApplicationShortcut; onActivated: backend.toggleHelp() }
+    Shortcut { sequence: "O"; enabled: !isInputActive; context: Qt.ApplicationShortcut; onActivated: backend.openPortal() }
     Shortcut { sequences: [StandardKey.Open]; context: Qt.ApplicationShortcut; onActivated: backend.openPortal() }
     Shortcut { sequences: [StandardKey.Save]; context: Qt.ApplicationShortcut; onActivated: backend.saveDocument() }
     Shortcut { sequences: [StandardKey.SaveAs]; context: Qt.ApplicationShortcut; onActivated: backend.saveAsDocument() }
-    Shortcut { sequence: "D"; context: Qt.ApplicationShortcut; onActivated: backend.toggleDarkMode() }
-    Shortcut { sequence: "R"; context: Qt.ApplicationShortcut; onActivated: backend.rotateClockwise() }
-    Shortcut { sequence: "T"; context: Qt.ApplicationShortcut; onActivated: backend.toggleToc() }
-    Shortcut { sequence: "W"; context: Qt.ApplicationShortcut; onActivated: backend.fitToWidth(flickable.width) }
-    Shortcut { sequence: "P"; context: Qt.ApplicationShortcut; onActivated: backend.fitToPage(flickable.width, flickable.height) }
-    Shortcut { sequence: "J"; context: Qt.ApplicationShortcut; onActivated: backend.nextPage() }
-    Shortcut { sequence: "K"; context: Qt.ApplicationShortcut; onActivated: backend.prevPage() }
-    Shortcut { sequence: "Space"; context: Qt.ApplicationShortcut; onActivated: backend.nextPage() }
-    Shortcut { sequence: "Shift+Space"; context: Qt.ApplicationShortcut; onActivated: backend.prevPage() }
-    Shortcut { sequence: "Down"; context: Qt.ApplicationShortcut; onActivated: flickable.flick(0, -600) }
-    Shortcut { sequence: "Up"; context: Qt.ApplicationShortcut; onActivated: flickable.flick(0, 600) }
-    Shortcut { sequence: "PageDown"; context: Qt.ApplicationShortcut; onActivated: backend.nextPage() }
-    Shortcut { sequence: "PageUp"; context: Qt.ApplicationShortcut; onActivated: backend.prevPage() }
-    Shortcut { sequence: "Home"; context: Qt.ApplicationShortcut; onActivated: backend.goToPage(0) }
-    Shortcut { sequence: "End"; context: Qt.ApplicationShortcut; onActivated: backend.goToPage(backend.pageCount - 1) }
-    Shortcut { sequence: "+"; context: Qt.ApplicationShortcut; onActivated: backend.zoomIn() }
-    Shortcut { sequence: "="; context: Qt.ApplicationShortcut; onActivated: backend.zoomIn() }
-    Shortcut { sequence: "-"; context: Qt.ApplicationShortcut; onActivated: backend.zoomOut() }
-    Shortcut { sequence: "0"; context: Qt.ApplicationShortcut; onActivated: backend.resetZoom() }
+    Shortcut { sequence: "D"; enabled: !isInputActive; context: Qt.ApplicationShortcut; onActivated: backend.toggleDarkMode() }
+    Shortcut { sequence: "R"; enabled: !isInputActive; context: Qt.ApplicationShortcut; onActivated: backend.rotateClockwise() }
+    Shortcut { sequence: "T"; enabled: !isInputActive; context: Qt.ApplicationShortcut; onActivated: backend.toggleToc() }
+    Shortcut { sequence: "W"; enabled: !isInputActive; context: Qt.ApplicationShortcut; onActivated: backend.fitToWidth(flickable.width) }
+    Shortcut { sequence: "P"; enabled: !isInputActive; context: Qt.ApplicationShortcut; onActivated: backend.fitToPage(flickable.width, flickable.height) }
+    Shortcut { sequence: "J"; enabled: !isInputActive; context: Qt.ApplicationShortcut; onActivated: backend.nextPage() }
+    Shortcut { sequence: "K"; enabled: !isInputActive; context: Qt.ApplicationShortcut; onActivated: backend.prevPage() }
+    Shortcut { sequence: "Space"; enabled: !isInputActive; context: Qt.ApplicationShortcut; onActivated: backend.nextPage() }
+    Shortcut { sequence: "Shift+Space"; enabled: !isInputActive; context: Qt.ApplicationShortcut; onActivated: backend.prevPage() }
+    Shortcut { sequence: "Down"; enabled: !isInputActive; context: Qt.ApplicationShortcut; onActivated: flickable.flick(0, -600) }
+    Shortcut { sequence: "Up"; enabled: !isInputActive; context: Qt.ApplicationShortcut; onActivated: flickable.flick(0, 600) }
+    Shortcut { sequence: "PageDown"; enabled: !isInputActive; context: Qt.ApplicationShortcut; onActivated: backend.nextPage() }
+    Shortcut { sequence: "PageUp"; enabled: !isInputActive; context: Qt.ApplicationShortcut; onActivated: backend.prevPage() }
+    Shortcut { sequence: "Home"; enabled: !isInputActive; context: Qt.ApplicationShortcut; onActivated: backend.goToPage(0) }
+    Shortcut { sequence: "End"; enabled: !isInputActive; context: Qt.ApplicationShortcut; onActivated: backend.goToPage(backend.pageCount - 1) }
+    Shortcut { sequence: "+"; enabled: !isInputActive; context: Qt.ApplicationShortcut; onActivated: backend.zoomIn() }
+    Shortcut { sequence: "="; enabled: !isInputActive; context: Qt.ApplicationShortcut; onActivated: backend.zoomIn() }
+    Shortcut { sequence: "-"; enabled: !isInputActive; context: Qt.ApplicationShortcut; onActivated: backend.zoomOut() }
+    Shortcut { sequence: "0"; enabled: !isInputActive; context: Qt.ApplicationShortcut; onActivated: backend.resetZoom() }
     Shortcut {
         sequence: "/"
+        enabled: !isInputActive
         context: Qt.ApplicationShortcut
         onActivated: {
             floatingSearch.openSearch();
         }
     }
-    Shortcut { sequence: "N"; context: Qt.ApplicationShortcut; onActivated: backend.nextSearchResult() }
-    Shortcut { sequence: "Shift+N"; context: Qt.ApplicationShortcut; onActivated: backend.prevSearchResult() }
+    Shortcut { sequence: "N"; enabled: !isInputActive; context: Qt.ApplicationShortcut; onActivated: backend.nextSearchResult() }
+    Shortcut { sequence: "Shift+N"; enabled: !isInputActive; context: Qt.ApplicationShortcut; onActivated: backend.prevSearchResult() }
     Shortcut {
         sequence: "Escape"
         context: Qt.ApplicationShortcut
@@ -196,13 +201,82 @@ ApplicationWindow {
                             onClicked: backend.zoomOut()
                         }
 
-                        Text {
-                            text: Math.round(backend.zoom * 100) + "%"
-                            font.pixelSize: 11
-                            font.weight: Font.Medium
-                            color: "#b0b5c4"
-                            Layout.minimumWidth: 36
-                            horizontalAlignment: Text.AlignHCenter
+                        Rectangle {
+                            id: zoomBox
+                            Layout.preferredWidth: 48
+                            Layout.preferredHeight: 24
+                            radius: 4
+                            color: zoomInput.activeFocus ? "#181a24" : (zoomMouse.containsMouse ? "#1c1e2a" : "transparent")
+                            border.color: zoomInput.activeFocus ? theme.accent : (zoomMouse.containsMouse ? "#2f3346" : "#222533")
+                            border.width: 1
+
+                            TextInput {
+                                id: zoomInput
+                                anchors.fill: parent
+                                anchors.margins: 2
+                                horizontalAlignment: TextInput.AlignHCenter
+                                verticalAlignment: TextInput.AlignVCenter
+                                font.pixelSize: 11
+                                font.weight: Font.Medium
+                                color: zoomInput.activeFocus ? "#ffffff" : "#b0b5c4"
+                                selectionColor: theme.accent
+                                selectedTextColor: theme.accentForeground
+                                selectByMouse: true
+                                activeFocusOnTab: true
+                                clip: true
+
+                                text: Math.round(backend.zoom * 100) + "%"
+
+                                function commitZoom() {
+                                    var clean = text.replace(/[^0-9.]/g, "");
+                                    var val = parseFloat(clean);
+                                    if (!isNaN(val) && val >= 10 && val <= 1000) {
+                                        backend.setZoom(val / 100.0);
+                                    }
+                                    text = Math.round(backend.zoom * 100) + "%";
+                                    zoomInput.focus = false;
+                                    win.forceActiveFocus();
+                                }
+
+                                onAccepted: commitZoom()
+
+                                Keys.onEscapePressed: {
+                                    text = Math.round(backend.zoom * 100) + "%";
+                                    zoomInput.focus = false;
+                                    win.forceActiveFocus();
+                                }
+
+                                onActiveFocusChanged: {
+                                    if (activeFocus) {
+                                        var clean = text.replace("%", "").trim();
+                                        text = clean;
+                                        selectAll();
+                                    } else {
+                                        commitZoom();
+                                    }
+                                }
+                            }
+
+                            Connections {
+                                target: backend
+                                function onZoomChanged() {
+                                    if (!zoomInput.activeFocus) {
+                                        zoomInput.text = Math.round(backend.zoom * 100) + "%";
+                                    }
+                                }
+                            }
+
+                            MouseArea {
+                                id: zoomMouse
+                                anchors.fill: parent
+                                cursorShape: Qt.IBeamCursor
+                                hoverEnabled: true
+                                acceptedButtons: Qt.NoButton
+                            }
+
+                            ToolTip.visible: zoomMouse.containsMouse && !zoomInput.activeFocus
+                            ToolTip.delay: 400
+                            ToolTip.text: qsTr("Zoom percentage (click to edit)")
                         }
 
                         IconButton {
@@ -609,6 +683,25 @@ ApplicationWindow {
                     clip: true
                     boundsBehavior: Flickable.StopAtBounds
 
+                    onWidthChanged: {
+                        if (backend.fitMode === 1) backend.fitToWidth(width);
+                        else if (backend.fitMode === 2) backend.fitToPage(width, height);
+                    }
+                    onHeightChanged: {
+                        if (backend.fitMode === 2) backend.fitToPage(width, height);
+                    }
+
+                    Connections {
+                        target: backend
+                        function onRotationChanged() {
+                            if (backend.fitMode === 1) {
+                                backend.fitToWidth(flickable.width);
+                            } else if (backend.fitMode === 2) {
+                                backend.fitToPage(flickable.width, flickable.height);
+                            }
+                        }
+                    }
+
                     ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded; active: true }
                     ScrollBar.horizontal: ScrollBar { policy: ScrollBar.AsNeeded }
 
@@ -631,17 +724,17 @@ ApplicationWindow {
                                 id: docImage
                                 anchors.centerIn: parent
                                 asynchronous: true
-                                cache: false
+                                cache: true
                                 smooth: true
                                 fillMode: Image.PreserveAspectFit
 
                                 source: backend.hasDocument
-                                    ? backend.pageImageUrl(backend.currentPage, 140 * backend.zoom)
+                                    ? backend.pageImageUrl(backend.currentPage, 140 * backend.zoom, backend.rotation, backend.darkMode ? 1 : 0)
                                     : ""
 
                                 BusyIndicator {
                                     anchors.centerIn: parent
-                                    running: docImage.status === Image.Loading
+                                    running: docImage.status === Image.Loading && !docImage.paintedWidth
                                 }
                             }
                         }

@@ -63,6 +63,10 @@ void Backend::setZoom(double z) {
     const double clamped = std::clamp(z, 0.2, 5.0);
     if (std::abs(clamped - m_zoom) > 0.001) {
         m_zoom = clamped;
+        if (m_fitMode != 0) {
+            m_fitMode = 0;
+            emit fitModeChanged();
+        }
         emit zoomChanged();
     }
 }
@@ -81,10 +85,7 @@ void Backend::setRotation(int rot) {
     const int norm = (rot % 360 + 360) % 360;
     if (norm != m_rotation) {
         m_rotation = norm;
-        if (m_provider) m_provider->clearCache();
-        ++m_revision;
         emit rotationChanged();
-        emit revisionChanged();
     }
 }
 
@@ -287,13 +288,15 @@ void Backend::clearSearch() {
     emit searchChanged();
 }
 
-QString Backend::pageImageUrl(int pageIndex, double dpi) const {
-    const QString darkFlag = m_darkMode ? QStringLiteral("1") : QStringLiteral("0");
+QString Backend::pageImageUrl(int pageIndex, double dpi, int rot, int dark) const {
+    const int effectiveRot = (rot >= 0) ? rot : m_rotation;
+    const bool effectiveDark = (dark >= 0) ? (dark != 0) : m_darkMode;
+    const QString darkFlag = effectiveDark ? QStringLiteral("1") : QStringLiteral("0");
     return QStringLiteral("image://doc/%1_%2_%3_%4_%5")
         .arg(pageIndex)
         .arg(static_cast<int>(dpi))
         .arg(darkFlag)
-        .arg(m_rotation)
+        .arg(effectiveRot)
         .arg(m_revision);
 }
 

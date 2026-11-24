@@ -33,8 +33,12 @@ private slots:
         PageImageProvider provider(&engine);
         Backend backend(&engine, &provider);
 
+        backend.setFitMode(1);
+        QCOMPARE(backend.fitMode(), 1);
+
         backend.setZoom(0.05);
         QCOMPARE(backend.zoom(), 0.2);
+        QCOMPARE(backend.fitMode(), 0);
 
         backend.setZoom(10.0);
         QCOMPARE(backend.zoom(), 5.0);
@@ -138,6 +142,15 @@ private slots:
         QVERIFY(!page0Rot.isNull());
         QCOMPARE(page0Rot.width(), page0.height());
         QCOMPARE(page0Rot.height(), page0.width());
+
+        // Test provider rotation fast-path
+        QSize s0, sRot;
+        const QImage prov0 = provider.requestImage("0_72_0_0_0", &s0, QSize());
+        QVERIFY(!prov0.isNull());
+        const QImage provRot = provider.requestImage("0_72_0_90_0", &sRot, QSize());
+        QVERIFY(!provRot.isNull());
+        QCOMPARE(provRot.width(), prov0.height());
+        QCOMPARE(provRot.height(), prov0.width());
 
         // Test night mode inversion
         const QImage page0Night = engine.renderPage(0, 72.0, true, 0);

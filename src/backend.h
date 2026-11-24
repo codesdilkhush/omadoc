@@ -98,7 +98,7 @@ public:
     Q_INVOKABLE void prevSearchResult();
     Q_INVOKABLE void clearSearch();
 
-    Q_INVOKABLE QString pageImageUrl(int pageIndex, double dpi = 150.0) const;
+    Q_INVOKABLE QString pageImageUrl(int pageIndex, double dpi = 150.0, int rot = -1, int dark = -1) const;
     Q_INVOKABLE QSizeF pageSize(int pageIndex) const;
     Q_INVOKABLE double pageAspectRatio(int pageIndex) const;
 

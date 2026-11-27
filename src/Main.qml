@@ -15,35 +15,65 @@ ApplicationWindow {
 
     Material.theme: Material.Dark
     Material.accent: theme.accent
-    Material.roundedScale: theme.radius
+    Material.roundedScale: theme.radius <= 0 ? Material.NotRounded
+                         : (theme.radius <= 4 ? Material.ExtraSmallScale
+                         : (theme.radius <= 8 ? Material.SmallScale
+                         : Material.MediumScale))
 
     Item {
         id: windowFocusTarget
         focus: true
     }
 
-    // Transparent overlay active ONLY when editing zoomInput, to reliably commit and dismiss on any outside click
+    // Transparent overlay active ONLY when editing zoomInput or bottom page input, to reliably commit and dismiss on any outside click
     MouseArea {
         id: focusDismissOverlay
         anchors.fill: parent
         z: 40
-        visible: typeof zoomInput !== "undefined" && zoomInput.activeFocus
-        onClicked: zoomInput.commitZoom()
+        visible: (typeof zoomInput !== "undefined" && zoomInput.activeFocus) ||
+                 (typeof pageScrubber !== "undefined" && pageScrubber.inputActive)
+        onPressed: (mouse) => {
+            if (typeof zoomInput !== "undefined" && zoomInput.activeFocus) {
+                const pt = mapToItem(zoomBox, mouse.x, mouse.y);
+                if (pt.x >= 0 && pt.y >= 0 && pt.x <= zoomBox.width && pt.y <= zoomBox.height) {
+                    mouse.accepted = false;
+                    return;
+                }
+            }
+            if (typeof pageScrubber !== "undefined" && pageScrubber.inputActive) {
+                const pt = mapToItem(pageScrubber, mouse.x, mouse.y);
+                if (pt.x >= 0 && pt.y >= 0 && pt.x <= pageScrubber.width && pt.y <= pageScrubber.height) {
+                    mouse.accepted = false;
+                    return;
+                }
+            }
+        }
+        onClicked: {
+            if (zoomInput.activeFocus) zoomInput.commitZoom();
+            if (pageScrubber.inputActive) pageScrubber.commitPageInput();
+        }
     }
 
     property string activeAnnotationColor: "#ffe082"
-    readonly property bool isNoteEditorActive: typeof activeNoteDialog !== "undefined" && activeNoteDialog.visible
 
     // Check if user is typing in a text input field to avoid intercepting keystrokes
     readonly property bool isInputActive: (typeof zoomInput !== "undefined" && zoomInput.activeFocus) ||
-                                          (typeof searchField !== "undefined" && searchField.activeFocus) ||
-                                          isNoteEditorActive
+                                          (typeof pageScrubber !== "undefined" && pageScrubber.inputActive) ||
+                                          (typeof searchField !== "undefined" && searchField.activeFocus)
 
     readonly property var currentPageAnnots: {
         backend.currentPage;
         backend.rotation;
         backend.annotations;
         return backend.pageAnnotations(backend.currentPage);
+    }
+
+    readonly property var currentSearchHighlights: {
+        backend.currentPage;
+        backend.rotation;
+        backend.searchQuery;
+        backend.searchResultsCount;
+        return backend.searchHighlights(backend.currentPage);
     }
 
     // Application Shortcuts
@@ -57,13 +87,14 @@ ApplicationWindow {
     Shortcut { sequence: "R"; enabled: !isInputActive; context: Qt.ApplicationShortcut; onActivated: backend.rotateClockwise() }
     Shortcut { sequence: "Shift+R"; enabled: !isInputActive; context: Qt.ApplicationShortcut; onActivated: backend.rotateCounterClockwise() }
     Shortcut { sequence: "H"; enabled: !isInputActive; context: Qt.ApplicationShortcut; onActivated: backend.activeTool = (backend.activeTool === 1 ? 0 : 1) }
-    Shortcut { sequence: "S"; enabled: !isInputActive; context: Qt.ApplicationShortcut; onActivated: backend.activeTool = (backend.activeTool === 2 ? 0 : 2) }
     Shortcut { sequence: "V"; enabled: !isInputActive; context: Qt.ApplicationShortcut; onActivated: backend.activeTool = 0 }
     Shortcut { sequence: "T"; enabled: !isInputActive; context: Qt.ApplicationShortcut; onActivated: backend.toggleToc() }
     Shortcut { sequence: "W"; enabled: !isInputActive; context: Qt.ApplicationShortcut; onActivated: backend.fitToWidth(flickable.width) }
     Shortcut { sequence: "P"; enabled: !isInputActive; context: Qt.ApplicationShortcut; onActivated: backend.fitToPage(flickable.width, flickable.height) }
     Shortcut { sequence: "J"; enabled: !isInputActive; context: Qt.ApplicationShortcut; onActivated: backend.nextPage() }
     Shortcut { sequence: "K"; enabled: !isInputActive; context: Qt.ApplicationShortcut; onActivated: backend.prevPage() }
+    Shortcut { sequence: "Right"; enabled: !isInputActive; context: Qt.ApplicationShortcut; onActivated: backend.nextPage() }
+    Shortcut { sequence: "Left"; enabled: !isInputActive; context: Qt.ApplicationShortcut; onActivated: backend.prevPage() }
     Shortcut { sequence: "Space"; enabled: !isInputActive; context: Qt.ApplicationShortcut; onActivated: backend.nextPage() }
     Shortcut { sequence: "Shift+Space"; enabled: !isInputActive; context: Qt.ApplicationShortcut; onActivated: backend.prevPage() }
     Shortcut { sequence: "Down"; enabled: !isInputActive; context: Qt.ApplicationShortcut; onActivated: flickable.flick(0, -600) }
@@ -88,10 +119,11 @@ ApplicationWindow {
     Shortcut { sequence: "Shift+N"; enabled: !isInputActive; context: Qt.ApplicationShortcut; onActivated: backend.prevSearchResult() }
     Shortcut {
         sequence: "Escape"
+        enabled: !(typeof zoomInput !== "undefined" && zoomInput.activeFocus) &&
+                 !(typeof pageScrubber !== "undefined" && pageScrubber.inputActive)
         context: Qt.ApplicationShortcut
         onActivated: {
-            if (typeof activeNoteDialog !== "undefined" && activeNoteDialog.visible) activeNoteDialog.closeNote();
-            else if (backend.helpVisible) backend.helpVisible = false;
+            if (backend.helpVisible) backend.helpVisible = false;
             else if (floatingSearch.visible) floatingSearch.closeSearch();
             else if (backend.activeTool !== 0) backend.activeTool = 0;
         }
@@ -155,7 +187,7 @@ ApplicationWindow {
                     Text {
                         text: backend.hasDocument ? backend.title : "Omadoc"
                         font.pixelSize: 13
-                        font.weight: Font.SemiBold
+                        font.weight: Font.DemiBold
                         color: "#f3f4f6"
                         elide: Text.ElideRight
                         Layout.fillWidth: true
@@ -178,62 +210,6 @@ ApplicationWindow {
                         id: navIslandRow
                         anchors.centerIn: parent
                         spacing: 2
-
-                        // Page Previous
-                        IconButton {
-                            iconSource: "qrc:/icons/chevron-left.svg"
-                            iconSize: 14
-                            enabled: backend.currentPage > 0
-                            tooltipText: qsTr("Previous Page (K / Shift+Space)")
-                            onClicked: backend.prevPage()
-                        }
-
-                        // Page Jump Input
-                        Row {
-                            spacing: 3
-                            anchors.verticalCenter: parent.verticalCenter
-
-                            TextInput {
-                                id: pageJumpInput
-                                text: (backend.currentPage + 1).toString()
-                                font.pixelSize: 12
-                                font.weight: Font.Bold
-                                color: "#ffffff"
-                                selectByMouse: true
-                                horizontalAlignment: Text.AlignRight
-                                anchors.verticalCenter: parent.verticalCenter
-                                onAccepted: {
-                                    const val = parseInt(text) - 1;
-                                    if (!isNaN(val)) backend.goToPage(val);
-                                    pageJumpInput.focus = false;
-                                }
-                            }
-
-                            Text {
-                                text: "/ " + backend.pageCount
-                                font.pixelSize: 11
-                                color: "#717789"
-                                anchors.verticalCenter: parent.verticalCenter
-                            }
-                        }
-
-                        // Page Next
-                        IconButton {
-                            iconSource: "qrc:/icons/chevron-right.svg"
-                            iconSize: 14
-                            enabled: backend.currentPage < backend.pageCount - 1
-                            tooltipText: qsTr("Next Page (J / Space)")
-                            onClicked: backend.nextPage()
-                        }
-
-                        // Divider Line
-                        Rectangle {
-                            width: 1
-                            height: 16
-                            color: "#272a38"
-                            Layout.leftMargin: 4
-                            Layout.rightMargin: 4
-                        }
 
                         // Zoom Controls
                         IconButton {
@@ -262,6 +238,7 @@ ApplicationWindow {
 
                                 TextInput {
                                     id: zoomInput
+                                    property bool dirty: false
                                     text: Math.round(backend.zoom * 100).toString()
                                     font.pixelSize: 11
                                     font.weight: Font.Medium
@@ -276,6 +253,7 @@ ApplicationWindow {
                                     clip: true
 
                                     function commitZoom() {
+                                        dirty = false;
                                         var clean = text.replace(/[^0-9]/g, "");
                                         var val = parseInt(clean);
                                         if (!isNaN(val) && val >= 10 && val <= 1000) {
@@ -285,18 +263,23 @@ ApplicationWindow {
                                         windowFocusTarget.forceActiveFocus();
                                     }
 
+                                    onTextEdited: dirty = true
                                     onAccepted: commitZoom()
 
                                     Keys.onEscapePressed: {
+                                        dirty = false;
                                         text = Math.round(backend.zoom * 100).toString();
                                         windowFocusTarget.forceActiveFocus();
                                     }
 
                                     onActiveFocusChanged: {
                                         if (activeFocus) {
+                                            dirty = false;
                                             selectAll();
-                                        } else {
+                                        } else if (dirty) {
                                             commitZoom();
+                                        } else {
+                                            text = Math.round(backend.zoom * 100).toString();
                                         }
                                     }
 
@@ -320,6 +303,7 @@ ApplicationWindow {
                             Connections {
                                 target: backend
                                 function onZoomChanged() {
+                                    zoomInput.dirty = false;
                                     if (!zoomInput.activeFocus) {
                                         zoomInput.text = Math.round(backend.zoom * 100).toString();
                                     }
@@ -405,20 +389,11 @@ ApplicationWindow {
                             onClicked: backend.activeTool = (backend.activeTool === 1 ? 0 : 1)
                         }
 
-                        // Sticky Note Tool
-                        IconButton {
-                            iconSource: "qrc:/icons/sticky-note.svg"
-                            iconSize: 14
-                            active: backend.activeTool === 2
-                            tooltipText: qsTr("Sticky Note (S)")
-                            onClicked: backend.activeTool = (backend.activeTool === 2 ? 0 : 2)
-                        }
-
                         // Color Presets for Active Tool
                         Row {
                             visible: backend.activeTool !== 0
                             spacing: 4
-                            anchors.verticalCenter: parent.verticalCenter
+                            Layout.alignment: Qt.AlignVCenter
                             Layout.leftMargin: 4
                             Layout.rightMargin: 4
 
@@ -429,7 +404,7 @@ ApplicationWindow {
                                     height: 14
                                     radius: 7
                                     color: modelData
-                                    border.color: win.activeAnnotationColor === modelData ? "#ffffff" : "#00000040"
+                                    border.color: win.activeAnnotationColor === modelData ? "#ffffff" : "#40000000"
                                     border.width: win.activeAnnotationColor === modelData ? 2 : 1
 
                                     MouseArea {
@@ -477,47 +452,99 @@ ApplicationWindow {
                         tooltipText: qsTr("More Options")
                         onClicked: moreMenu.open()
 
+                        component ThemedMenuItem: MenuItem {
+                            id: itemCtrl
+                            implicitWidth: 232
+                            implicitHeight: 34
+                            leftPadding: 12
+                            rightPadding: 12
+
+                            contentItem: Text {
+                                text: itemCtrl.text
+                                font.pixelSize: 12
+                                font.weight: Font.Medium
+                                color: !itemCtrl.enabled ? "#555b6e"
+                                     : itemCtrl.highlighted ? "#ffffff"
+                                     : "#e5e7eb"
+                                verticalAlignment: Text.AlignVCenter
+                                elide: Text.ElideRight
+                            }
+
+                            background: Rectangle {
+                                radius: Math.max(5, Math.min(theme.radius, 8))
+                                color: !itemCtrl.enabled ? "transparent"
+                                     : itemCtrl.down ? "#282a36"
+                                     : itemCtrl.highlighted ? "#20232e"
+                                     : "transparent"
+                                border.color: itemCtrl.highlighted && itemCtrl.enabled ? theme.accent : "transparent"
+                                border.width: itemCtrl.highlighted && itemCtrl.enabled ? 1 : 0
+                            }
+                        }
+
+                        component ThemedMenuSeparator: MenuSeparator {
+                            topPadding: 5
+                            bottomPadding: 5
+                            leftPadding: 8
+                            rightPadding: 8
+                            background: Item {}
+                            contentItem: Rectangle {
+                                implicitWidth: 216
+                                implicitHeight: 1
+                                color: "#252838"
+                            }
+                        }
+
                         Menu {
                             id: moreMenu
                             y: moreBtn.height + 4
+                            width: 244
+                            padding: 6
                             Material.theme: Material.Dark
 
-                            MenuItem {
+                            background: Rectangle {
+                                implicitWidth: 244
+                                radius: Math.max(8, theme.radius)
+                                color: "#161823"
+                                border.color: "#2a2d3e"
+                                border.width: 1
+                            }
+
+                            ThemedMenuItem {
                                 text: qsTr("Open Document (Ctrl+O)")
                                 onTriggered: backend.openPortal()
                             }
-                            MenuItem {
+                            ThemedMenuItem {
                                 text: qsTr("Save (Ctrl+S)")
                                 enabled: backend.hasDocument
                                 onTriggered: backend.saveDocument()
                             }
-                            MenuItem {
+                            ThemedMenuItem {
                                 text: qsTr("Save As... (Ctrl+Shift+S)")
                                 enabled: backend.hasDocument
                                 onTriggered: backend.saveAsDocument()
                             }
-                            MenuSeparator {}
-                            MenuItem {
+                            ThemedMenuSeparator {}
+                            ThemedMenuItem {
                                 text: qsTr("Clear Page Annotations")
                                 enabled: backend.hasDocument && win.currentPageAnnots.length > 0
                                 onTriggered: backend.clearAnnotationsForPage(backend.currentPage)
                             }
-                            MenuItem {
+                            ThemedMenuItem {
                                 text: qsTr("Clear All Annotations")
                                 enabled: backend.hasDocument && backend.annotationCount > 0
                                 onTriggered: backend.clearAllAnnotations()
                             }
-                            MenuSeparator {}
-                            MenuItem {
+                            ThemedMenuSeparator {}
+                            ThemedMenuItem {
                                 text: qsTr("Keyboard Shortcuts (?)")
                                 onTriggered: backend.toggleHelp()
                             }
-                            MenuItem {
+                            ThemedMenuItem {
                                 text: qsTr("Close Document")
                                 enabled: backend.hasDocument
                                 onTriggered: backend.closeDocument()
                             }
-                            MenuItem {
+                            ThemedMenuItem {
                                 text: qsTr("Quit (Q)")
                                 onTriggered: Qt.quit()
                             }
@@ -629,7 +656,13 @@ ApplicationWindow {
                                 anchors.fill: parent
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
-                                onClicked: backend.search(modelData.title)
+                                onClicked: {
+                                    if (modelData.page !== undefined) {
+                                        backend.goToPage(modelData.page);
+                                    } else {
+                                        backend.search(modelData.title);
+                                    }
+                                }
                             }
                         }
                     }
@@ -799,10 +832,10 @@ ApplicationWindow {
                             Layout.alignment: Qt.AlignHCenter
                             spacing: 10
 
-                            PillBadge { text: "Space: Next Page" }
-                            PillBadge { text: "D: Night Mode" }
-                            PillBadge { text: "/: Search" }
-                            PillBadge { text: "?: All Shortcuts" }
+                            PillBadge { text: qsTr("Space: Next Page") }
+                            PillBadge { text: qsTr("D: Night Mode") }
+                            PillBadge { text: qsTr("/: Search") }
+                            PillBadge { text: qsTr("?: All Shortcuts") }
                         }
                     }
                 }
@@ -835,6 +868,13 @@ ApplicationWindow {
                                 backend.fitToPage(flickable.width, flickable.height);
                             }
                         }
+                        function onCurrentPageChanged() {
+                            if (backend.fitMode === 1) {
+                                backend.fitToWidth(flickable.width);
+                            } else if (backend.fitMode === 2) {
+                                backend.fitToPage(flickable.width, flickable.height);
+                            }
+                        }
                     }
 
                     ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded; active: true }
@@ -852,7 +892,7 @@ ApplicationWindow {
                             height: docImage.height
                             radius: 3
                             color: backend.darkMode ? "#12141a" : "#ffffff"
-                            border.color: backend.darkMode ? "#2a2d3e" : "#00000030"
+                            border.color: backend.darkMode ? "#2a2d3e" : "#30000000"
                             border.width: 1
 
                             Image {
@@ -869,7 +909,24 @@ ApplicationWindow {
 
                                 BusyIndicator {
                                     anchors.centerIn: parent
-                                    running: docImage.status === Image.Loading && !docImage.paintedWidth
+                                    running: docImage.status === Image.Loading
+                                }
+                            }
+
+                            // Layer 0.5: Render Search Match Highlights
+                            Repeater {
+                                model: win.currentSearchHighlights
+                                delegate: Rectangle {
+                                    x: Math.round(modelData.x * pagePaper.width)
+                                    y: Math.round(modelData.y * pagePaper.height)
+                                    width: Math.max(4, Math.round(modelData.width * pagePaper.width))
+                                    height: Math.max(4, Math.round(modelData.height * pagePaper.height))
+                                    z: 12
+                                    color: theme.accent
+                                    opacity: 0.42
+                                    radius: 2
+                                    border.color: theme.accent
+                                    border.width: 1
                                 }
                             }
 
@@ -931,46 +988,7 @@ ApplicationWindow {
                                 }
                             }
 
-                            // Layer 2: Render Sticky Note Pins
-                            Repeater {
-                                model: win.currentPageAnnots
-                                delegate: Item {
-                                    id: notePinItem
-                                    visible: modelData.type === "sticky"
-                                    x: Math.round(modelData.x * pagePaper.width) - 14
-                                    y: Math.round(modelData.y * pagePaper.height) - 14
-                                    width: 28
-                                    height: 28
-                                    z: 35
-
-                                    Rectangle {
-                                        anchors.fill: parent
-                                        radius: 14
-                                        color: modelData.color || "#ffd54f"
-                                        border.color: notePinHover.hovered ? "#ffffff" : "#00000040"
-                                        border.width: 1.5
-
-                                        Image {
-                                            anchors.centerIn: parent
-                                            source: "qrc:/icons/sticky-note.svg"
-                                            width: 14
-                                            height: 14
-                                        }
-
-                                        HoverHandler {
-                                            id: notePinHover
-                                        }
-
-                                        MouseArea {
-                                            anchors.fill: parent
-                                            cursorShape: Qt.PointingHandCursor
-                                            onClicked: activeNoteDialog.openForExistingNote(modelData)
-                                        }
-                                    }
-                                }
-                            }
-
-                            // Layer 3: Drag Highlight Selection Preview
+                            // Layer 2: Drag Highlight Selection Preview
                             Rectangle {
                                 id: dragHighlightPreview
                                 visible: paperAnnotArea.isDrawing && backend.activeTool === 1
@@ -986,13 +1004,13 @@ ApplicationWindow {
                                 z: 25
                             }
 
-                            // Layer 4: Annotation Interaction MouseArea
+                            // Layer 3: Annotation Interaction MouseArea
                             MouseArea {
                                 id: paperAnnotArea
                                 anchors.fill: parent
                                 z: 20
-                                enabled: backend.hasDocument && backend.activeTool !== 0
-                                cursorShape: backend.activeTool === 1 ? Qt.CrossCursor : Qt.PointingHandCursor
+                                enabled: backend.hasDocument && backend.activeTool === 1
+                                cursorShape: Qt.CrossCursor
                                 hoverEnabled: true
 
                                 property real startX: 0
@@ -1002,9 +1020,6 @@ ApplicationWindow {
                                 property bool isDrawing: false
 
                                 onPressed: (mouse) => {
-                                    if (activeNoteDialog.visible) {
-                                        activeNoteDialog.closeNote();
-                                    }
                                     if (backend.activeTool === 1) {
                                         startX = mouse.x;
                                         startY = mouse.y;
@@ -1035,214 +1050,6 @@ ApplicationWindow {
                                         }
                                     }
                                 }
-
-                                onClicked: (mouse) => {
-                                    if (backend.activeTool === 2) {
-                                        var nx = mouse.x / pagePaper.width;
-                                        var ny = mouse.y / pagePaper.height;
-                                        var noteId = backend.addStickyNote(backend.currentPage, nx, ny, "", win.activeAnnotationColor);
-                                        activeNoteDialog.openForNewNote(noteId, mouse.x, mouse.y);
-                                    }
-                                }
-                            }
-
-                            // Layer 5: Active Sticky Note Card Dialog
-                            Rectangle {
-                                id: activeNoteDialog
-                                visible: false
-                                z: 100
-                                width: 280
-                                height: 210
-                                radius: 8
-                                color: "#181a24"
-                                border.color: "#2f3348"
-                                border.width: 1
-
-                                property string currentNoteId: ""
-                                property string currentNoteColor: "#ffd54f"
-
-                                function openForNewNote(id, clickX, clickY) {
-                                    currentNoteId = id;
-                                    currentNoteColor = win.activeAnnotationColor;
-                                    noteEditorArea.text = "";
-                                    positionAt(clickX, clickY);
-                                    visible = true;
-                                    noteEditorArea.forceActiveFocus();
-                                }
-
-                                function openForExistingNote(noteData) {
-                                    currentNoteId = noteData.id;
-                                    currentNoteColor = noteData.color || "#ffd54f";
-                                    noteEditorArea.text = noteData.content || "";
-                                    var px = Math.round(noteData.x * pagePaper.width);
-                                    var py = Math.round(noteData.y * pagePaper.height);
-                                    positionAt(px, py);
-                                    visible = true;
-                                    noteEditorArea.forceActiveFocus();
-                                }
-
-                                function positionAt(px, py) {
-                                    var targetX = px + 14;
-                                    var targetY = py + 14;
-                                    if (targetX + width > pagePaper.width) targetX = Math.max(8, px - width - 14);
-                                    if (targetY + height > pagePaper.height) targetY = Math.max(8, py - height - 14);
-                                    x = Math.max(8, Math.min(targetX, Math.max(8, pagePaper.width - width - 8)));
-                                    y = Math.max(8, Math.min(targetY, Math.max(8, pagePaper.height - height - 8)));
-                                }
-
-                                function closeNote() {
-                                    if (currentNoteId.length > 0) {
-                                        backend.updateStickyNote(currentNoteId, noteEditorArea.text);
-                                    }
-                                    visible = false;
-                                    currentNoteId = "";
-                                    windowFocusTarget.forceActiveFocus();
-                                }
-
-                                function deleteCurrentNote() {
-                                    if (currentNoteId.length > 0) {
-                                        backend.deleteAnnotation(currentNoteId);
-                                    }
-                                    visible = false;
-                                    currentNoteId = "";
-                                    windowFocusTarget.forceActiveFocus();
-                                }
-
-                                // Top color accent strip
-                                Rectangle {
-                                    id: noteAccentStrip
-                                    anchors.top: parent.top
-                                    anchors.left: parent.left
-                                    anchors.right: parent.right
-                                    height: 4
-                                    radius: 2
-                                    color: activeNoteDialog.currentNoteColor
-                                }
-
-                                ColumnLayout {
-                                    anchors.fill: parent
-                                    anchors.topMargin: 8
-                                    anchors.bottomMargin: 8
-                                    anchors.leftMargin: 10
-                                    anchors.rightMargin: 10
-                                    spacing: 6
-
-                                    // Dialog Header
-                                    RowLayout {
-                                        Layout.fillWidth: true
-
-                                        Image {
-                                            source: "qrc:/icons/sticky-note.svg"
-                                            width: 13
-                                            height: 13
-                                        }
-
-                                        Text {
-                                            text: qsTr("Sticky Note")
-                                            font.pixelSize: 11
-                                            font.weight: Font.Bold
-                                            color: "#b0b5c4"
-                                            Layout.fillWidth: true
-                                        }
-
-                                        // Delete Note Button
-                                        IconButton {
-                                            iconSource: "qrc:/icons/trash.svg"
-                                            iconSize: 12
-                                            implicitWidth: 22
-                                            implicitHeight: 22
-                                            tooltipText: qsTr("Delete Note")
-                                            onClicked: activeNoteDialog.deleteCurrentNote()
-                                        }
-
-                                        // Close Note Button
-                                        IconButton {
-                                            iconSource: "qrc:/icons/close.svg"
-                                            iconSize: 12
-                                            implicitWidth: 22
-                                            implicitHeight: 22
-                                            tooltipText: qsTr("Done / Close")
-                                            onClicked: activeNoteDialog.closeNote()
-                                        }
-                                    }
-
-                                    // Note Text Area
-                                    Rectangle {
-                                        Layout.fillWidth: true
-                                        Layout.fillHeight: true
-                                        color: "#12141c"
-                                        radius: 4
-                                        border.color: noteEditorArea.activeFocus ? theme.accent : "#222533"
-                                        border.width: 1
-
-                                        Flickable {
-                                            id: noteFlickable
-                                            anchors.fill: parent
-                                            anchors.margins: 6
-                                            contentWidth: width
-                                            contentHeight: noteEditorArea.implicitHeight
-                                            clip: true
-
-                                            TextArea.flickable: TextArea {
-                                                id: noteEditorArea
-                                                font.pixelSize: 12
-                                                color: "#ffffff"
-                                                wrapMode: TextEdit.Wrap
-                                                selectByMouse: true
-                                                placeholderText: qsTr("Write note here...")
-                                                placeholderTextColor: "#555b6e"
-                                                background: Item {}
-                                                onTextChanged: {
-                                                    if (activeNoteDialog.currentNoteId.length > 0) {
-                                                        backend.updateStickyNote(activeNoteDialog.currentNoteId, text);
-                                                    }
-                                                }
-                                            }
-
-                                            ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
-                                        }
-                                    }
-
-                                    // Footer with Color Picker and Done button
-                                    RowLayout {
-                                        Layout.fillWidth: true
-
-                                        Row {
-                                            spacing: 4
-                                            Repeater {
-                                                model: ["#ffd54f", "#80deea", "#81c784", "#ff8a65", "#ce93d8"]
-                                                delegate: Rectangle {
-                                                    width: 14
-                                                    height: 14
-                                                    radius: 7
-                                                    color: modelData
-                                                    border.color: activeNoteDialog.currentNoteColor === modelData ? "#ffffff" : "#00000040"
-                                                    border.width: activeNoteDialog.currentNoteColor === modelData ? 2 : 1
-
-                                                    MouseArea {
-                                                        anchors.fill: parent
-                                                        cursorShape: Qt.PointingHandCursor
-                                                        onClicked: {
-                                                            activeNoteDialog.currentNoteColor = modelData;
-                                                            win.activeAnnotationColor = modelData;
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-
-                                        Item { Layout.fillWidth: true }
-
-                                        Button {
-                                            text: qsTr("Done")
-                                            flat: true
-                                            font.pixelSize: 11
-                                            implicitHeight: 24
-                                            implicitWidth: 50
-                                            onClicked: activeNoteDialog.closeNote()
-                                        }
-                                    }
-                                }
                             }
                         }
                     }
@@ -1266,11 +1073,22 @@ ApplicationWindow {
                     function openSearch() {
                         visible = true;
                         searchField.forceActiveFocus();
+                        searchField.selectAll();
                     }
 
                     function closeSearch() {
+                        searchDebounceTimer.stop();
+                        searchField.text = "";
                         visible = false;
                         backend.clearSearch();
+                        windowFocusTarget.forceActiveFocus();
+                    }
+
+                    Timer {
+                        id: searchDebounceTimer
+                        interval: 150
+                        repeat: false
+                        onTriggered: backend.search(searchField.text)
                     }
 
                     RowLayout {
@@ -1285,16 +1103,45 @@ ApplicationWindow {
                             height: 15
                         }
 
-                        TextField {
-                            id: searchField
-                            placeholderText: qsTr("Find in document...")
-                            placeholderTextColor: "#61677c"
-                            color: "#ffffff"
-                            font.pixelSize: 12
+                        Item {
                             Layout.fillWidth: true
-                            background: Item {}
-                            onTextChanged: backend.search(text)
-                            onAccepted: backend.nextSearchResult()
+                            Layout.fillHeight: true
+
+                            HoverHandler {
+                                id: searchHover
+                            }
+
+                            Text {
+                                anchors.fill: parent
+                                anchors.leftMargin: 3
+                                verticalAlignment: Text.AlignVCenter
+                                text: qsTr("Find in document...")
+                                color: "#61677c"
+                                font.pixelSize: 12
+                                elide: Text.ElideRight
+                                visible: searchField.text.length === 0 && !searchHover.hovered
+                            }
+
+                            TextInput {
+                                id: searchField
+                                anchors.fill: parent
+                                verticalAlignment: TextInput.AlignVCenter
+                                color: "#ffffff"
+                                selectionColor: theme.accent
+                                selectedTextColor: theme.accentForeground
+                                selectByMouse: true
+                                font.pixelSize: 12
+                                clip: true
+                                onTextEdited: searchDebounceTimer.restart()
+                                onAccepted: {
+                                    searchDebounceTimer.stop();
+                                    if (backend.searchQuery !== text.trim()) {
+                                        backend.search(text);
+                                    } else {
+                                        backend.nextSearchResult();
+                                    }
+                                }
+                            }
                         }
 
                         PillBadge {
@@ -1336,8 +1183,9 @@ ApplicationWindow {
                     }
                 }
 
-                // Floating Scrubber HUD at Bottom
+                // Floating Go-To Page HUD at Bottom
                 PageScrubber {
+                    id: pageScrubber
                     anchors.bottom: parent.bottom
                     anchors.bottomMargin: 20
                     anchors.horizontalCenter: parent.horizontalCenter
@@ -1345,6 +1193,62 @@ ApplicationWindow {
                     currentPage: backend.currentPage
                     totalPages: backend.pageCount
                     onJumpToPage: (p) => backend.goToPage(p)
+                    onDismissFocusRequested: windowFocusTarget.forceActiveFocus()
+                }
+
+                // Toast notification banner for open/save errors & status
+                Rectangle {
+                    id: toastBanner
+                    anchors.top: parent.top
+                    anchors.topMargin: 12
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    z: 90
+                    visible: false
+                    height: 36
+                    width: Math.min(parent.width - 48, toastText.implicitWidth + 32)
+                    radius: 18
+                    color: isError ? "#2b161b" : "#161d24"
+                    border.color: isError ? "#ef4444" : theme.accent
+                    border.width: 1
+
+                    property bool isError: false
+
+                    Timer {
+                        id: toastTimer
+                        interval: 3500
+                        repeat: false
+                        onTriggered: toastBanner.visible = false
+                    }
+
+                    Connections {
+                        target: backend
+                        function onErrorOccurred(message) {
+                            if (message && message.length > 0) {
+                                toastBanner.isError = true;
+                                toastText.text = message;
+                                toastBanner.visible = true;
+                                toastTimer.restart();
+                            }
+                        }
+                        function onStatusMessage(message) {
+                            if (message && message.length > 0) {
+                                toastBanner.isError = false;
+                                toastText.text = message;
+                                toastBanner.visible = true;
+                                toastTimer.restart();
+                            }
+                        }
+                    }
+
+                    Text {
+                        id: toastText
+                        anchors.centerIn: parent
+                        font.pixelSize: 12
+                        font.weight: Font.Medium
+                        color: "#ffffff"
+                        elide: Text.ElideRight
+                        width: Math.min(implicitWidth, parent.width - 24)
+                    }
                 }
 
                 // Drag and drop receiver
@@ -1381,6 +1285,10 @@ ApplicationWindow {
             color: "#161823"
             border.color: "#2b2f40"
             border.width: 1
+
+            MouseArea {
+                anchors.fill: parent
+            }
 
             ColumnLayout {
                 id: modalContent
@@ -1429,6 +1337,7 @@ ApplicationWindow {
                             Layout.fillWidth: true
                             Row {
                                 spacing: 4
+                                KeyBadge { text: "→" }
                                 KeyBadge { text: "J" }
                                 KeyBadge { text: "Space" }
                                 KeyBadge { text: "PgDn" }
@@ -1441,6 +1350,7 @@ ApplicationWindow {
                             Layout.fillWidth: true
                             Row {
                                 spacing: 4
+                                KeyBadge { text: "←" }
                                 KeyBadge { text: "K" }
                                 KeyBadge { text: "Shift+Space" }
                                 KeyBadge { text: "PgUp" }
@@ -1520,11 +1430,10 @@ ApplicationWindow {
                             Row {
                                 spacing: 4
                                 KeyBadge { text: "H" }
-                                KeyBadge { text: "S" }
                                 KeyBadge { text: "V" }
                             }
                             Item { Layout.fillWidth: true }
-                            Text { text: qsTr("Highlight / Note / Pan"); color: "#d1d5db"; font.pixelSize: 12 }
+                            Text { text: qsTr("Highlight / Pan"); color: "#d1d5db"; font.pixelSize: 12 }
                         }
 
                         RowLayout {

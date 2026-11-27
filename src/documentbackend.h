@@ -5,6 +5,7 @@
 #include <QImage>
 #include <QSizeF>
 #include <QList>
+#include <QRectF>
 #include <QVariantList>
 
 class IDocumentBackend {
@@ -23,6 +24,11 @@ public:
     virtual QString author() const = 0;
     virtual QVariantList tableOfContents() = 0;
     virtual QList<int> search(const QString &query) const = 0;
+    virtual QList<QRectF> searchHighlights(int index, const QString &query) const {
+        Q_UNUSED(index);
+        Q_UNUSED(query);
+        return {};
+    }
 };
 
 #endif // OMADOC_DOCUMENTBACKEND_H

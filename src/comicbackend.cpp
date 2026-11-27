@@ -1,10 +1,12 @@
 #include "comicbackend.h"
+#include "archiveutils.h"
 
 #include <archive.h>
 #include <archive_entry.h>
 
 #include <QBuffer>
 #include <QCollator>
+#include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QImageReader>
@@ -18,9 +20,16 @@ ComicBackend::~ComicBackend() {
     close();
 }
 
+void ComicBackend::clearUnlocked() {
+    m_pages.clear();
+    m_filePath.clear();
+    m_title.clear();
+    m_author.clear();
+}
+
 bool ComicBackend::load(const QString &filePath) {
     QMutexLocker locker(&m_mutex);
-    close();
+    clearUnlocked();
 
     struct archive *a = archive_read_new();
     if (!a) return false;
@@ -40,37 +49,38 @@ bool ComicBackend::load(const QString &filePath) {
 
     while (archive_read_next_header(a, &entry) == ARCHIVE_OK) {
         const char *rawPath = archive_entry_pathname(entry);
-        if (!rawPath) continue;
-        const QString name = QString::fromUtf8(rawPath);
+        if (!rawPath) {
+            archive_read_data_skip(a);
+            continue;
+        }
+        QString name = QString::fromUtf8(rawPath);
+        name.replace('\\', '/');
+        while (name.startsWith(QStringLiteral("./"))) name.remove(0, 2);
+        while (name.startsWith('/')) name.remove(0, 1);
+        name = QDir::cleanPath(name);
 
-        // Skip directories and metadata/hidden junk
-        if (name.endsWith('/') || name.contains(QStringLiteral("__MACOSX")) || name.startsWith(QStringLiteral("."))) {
+        const QString baseName = QFileInfo(name).fileName();
+        // Skip directories, root ".", macOS resource forks, and dotfiles
+        if (archive_entry_filetype(entry) == AE_IFDIR || name.isEmpty() ||
+            name == QStringLiteral(".") || name.endsWith('/') ||
+            name.contains(QStringLiteral("__MACOSX")) || baseName.startsWith('.')) {
             archive_read_data_skip(a);
             continue;
         }
 
         // Check for ComicInfo.xml metadata
-        if (name.endsWith(QStringLiteral("ComicInfo.xml"), Qt::CaseInsensitive)) {
-            la_int64_t sz = archive_entry_size(entry);
-            QByteArray xmlData;
-            if (sz > 0) {
-                xmlData.resize(sz);
-                archive_read_data(a, xmlData.data(), sz);
-            } else {
-                char buf[8192];
-                ssize_t n;
-                while ((n = archive_read_data(a, buf, sizeof(buf))) > 0) {
-                    xmlData.append(buf, n);
-                }
-            }
+        if (baseName.compare(QStringLiteral("ComicInfo.xml"), Qt::CaseInsensitive) == 0) {
+            bool ok = false;
+            const QByteArray xmlData = OmadocUtils::readArchiveEntryData(a, entry, 16LL * 1024 * 1024, &ok);
+            if (!ok) continue;
             QXmlStreamReader xml(xmlData);
             while (!xml.atEnd()) {
                 xml.readNext();
                 if (xml.isStartElement()) {
                     if (xml.name() == QLatin1String("Title") && detectedTitle.isEmpty()) {
-                        detectedTitle = xml.readElementText();
+                        detectedTitle = xml.readElementText(QXmlStreamReader::IncludeChildElements).trimmed();
                     } else if (xml.name() == QLatin1String("Writer") && detectedAuthor.isEmpty()) {
-                        detectedAuthor = xml.readElementText();
+                        detectedAuthor = xml.readElementText(QXmlStreamReader::IncludeChildElements).trimmed();
                     }
                 }
             }
@@ -84,20 +94,9 @@ bool ComicBackend::load(const QString &filePath) {
             lower.endsWith(QStringLiteral(".avif")) || lower.endsWith(QStringLiteral(".gif")) ||
             lower.endsWith(QStringLiteral(".bmp"))) {
 
-            la_int64_t sz = archive_entry_size(entry);
-            QByteArray data;
-            if (sz > 0) {
-                data.resize(sz);
-                archive_read_data(a, data.data(), sz);
-            } else {
-                char buf[16384];
-                ssize_t n;
-                while ((n = archive_read_data(a, buf, sizeof(buf))) > 0) {
-                    data.append(buf, n);
-                }
-            }
-
-            if (!data.isEmpty()) {
+            bool ok = false;
+            const QByteArray data = OmadocUtils::readArchiveEntryData(a, entry, 128LL * 1024 * 1024, &ok);
+            if (ok && !data.isEmpty()) {
                 ComicPageEntry p;
                 p.name = name;
                 p.data = data;
@@ -144,21 +143,13 @@ bool ComicBackend::load(const QString &filePath) {
 }
 
 void ComicBackend::close() {
-    m_pages.clear();
-    m_filePath.clear();
-    m_title.clear();
-    m_author.clear();
+    QMutexLocker locker(&m_mutex);
+    clearUnlocked();
 }
 
 bool ComicBackend::saveCopy(const QString &targetPath) {
     QMutexLocker locker(&m_mutex);
-    if (m_filePath.isEmpty() || targetPath.isEmpty())
-        return false;
-    if (QFileInfo(m_filePath) == QFileInfo(targetPath))
-        return true;
-    if (QFile::exists(targetPath))
-        QFile::remove(targetPath);
-    return QFile::copy(m_filePath, targetPath);
+    return OmadocUtils::safeCopyFile(m_filePath, targetPath);
 }
 
 int ComicBackend::pageCount() const {
@@ -198,7 +189,7 @@ QImage ComicBackend::renderPage(int index, double dpi, bool darkMode, int rotati
     }
 
     if (darkMode) {
-        img.invertPixels(QImage::InvertRgb);
+        OmadocUtils::invertImageRgbSafely(img);
     }
 
     return img;

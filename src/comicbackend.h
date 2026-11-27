@@ -31,6 +31,8 @@ public:
     QList<int> search(const QString &query) const override;
 
 private:
+    void clearUnlocked();
+
     QString m_filePath;
     QString m_title;
     QString m_author;

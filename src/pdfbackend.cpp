@@ -1,4 +1,5 @@
 #include "pdfbackend.h"
+#include "archiveutils.h"
 
 #include <poppler-document.h>
 #include <poppler-page.h>
@@ -10,6 +11,7 @@
 #include <QDir>
 #include <QRandomGenerator>
 
+#include <algorithm>
 #include <functional>
 
 PdfBackend::PdfBackend() = default;
@@ -73,19 +75,33 @@ bool PdfBackend::saveCopy(const QString &targetPath) {
 
     const bool isSameAsLoaded = (QFileInfo(m_filePath) == targetInfo);
 
-    if (QFile::exists(targetPath)) {
-        QFile::remove(targetPath);
-    }
-
-    bool success = QFile::rename(tempPath, targetPath);
-    if (!success) {
-        QFile::remove(targetPath);
-        success = QFile::copy(tempPath, targetPath);
+    bool success = false;
+    if (QFileInfo(tempPath).absoluteDir() == dir) {
+        const QString backupPath = targetPath + QStringLiteral(".bak_%1").arg(QRandomGenerator::global()->generate());
+        const bool hadTarget = QFile::exists(targetPath);
+        if (hadTarget && !QFile::rename(targetPath, backupPath)) {
+            QFile::remove(tempPath);
+            return false;
+        }
+        success = QFile::rename(tempPath, targetPath);
+        if (!success) {
+            if (hadTarget) {
+                QFile::rename(backupPath, targetPath);
+            }
+            QFile::remove(tempPath);
+        } else if (hadTarget) {
+            QFile::remove(backupPath);
+        }
+    } else {
+        success = OmadocUtils::safeCopyFile(tempPath, targetPath);
         QFile::remove(tempPath);
     }
 
     if (success && isSameAsLoaded) {
         m_doc.reset(poppler::document::load_from_file(m_filePath.toStdString()));
+        if (!m_doc) {
+            return false;
+        }
     }
 
     return success;
@@ -124,12 +140,14 @@ QImage PdfBackend::renderPage(int index, double dpi, bool darkMode, int rotation
     renderer.set_render_hint(poppler::page_renderer::text_hinting, true);
     renderer.set_image_format(poppler::image::format_argb32);
 
+    const double safeDpi = (dpi > 0.0) ? std::clamp(dpi, 10.0, 2000.0) : 150.0;
+    const int normRot = (rotation % 360 + 360) % 360;
     poppler::rotation_enum rot = poppler::rotate_0;
-    if (rotation == 90) rot = poppler::rotate_90;
-    else if (rotation == 180) rot = poppler::rotate_180;
-    else if (rotation == 270) rot = poppler::rotate_270;
+    if (normRot == 90) rot = poppler::rotate_90;
+    else if (normRot == 180) rot = poppler::rotate_180;
+    else if (normRot == 270) rot = poppler::rotate_270;
 
-    poppler::image img = renderer.render_page(p.get(), dpi, dpi, -1, -1, -1, -1, rot);
+    poppler::image img = renderer.render_page(p.get(), safeDpi, safeDpi, -1, -1, -1, -1, rot);
     if (!img.is_valid())
         return QImage();
 
@@ -139,7 +157,7 @@ QImage PdfBackend::renderPage(int index, double dpi, bool darkMode, int rotation
     QImage result = qimg.copy();
 
     if (darkMode) {
-        result.invertPixels(QImage::InvertRgb);
+        OmadocUtils::invertImageRgbSafely(result);
     }
 
     return result;
@@ -204,4 +222,41 @@ QList<int> PdfBackend::search(const QString &query) const {
         }
     }
     return foundPages;
+}
+
+QList<QRectF> PdfBackend::searchHighlights(int index, const QString &query) const {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    QList<QRectF> highlights;
+    const QString trimmed = query.trimmed();
+    if (!m_doc || trimmed.isEmpty() || index < 0 || index >= m_doc->pages())
+        return highlights;
+
+    std::unique_ptr<poppler::page> p(m_doc->create_page(index));
+    if (!p) return highlights;
+
+    const poppler::rectf pageRect = p->page_rect(poppler::crop_box);
+    if (pageRect.width() <= 0.0 || pageRect.height() <= 0.0)
+        return highlights;
+
+    const QByteArray utf8 = trimmed.toUtf8();
+    const poppler::ustring needle = poppler::ustring::from_utf8(utf8.constData(), utf8.size());
+
+    poppler::rectf r;
+    auto dir = poppler::page::search_from_top;
+    constexpr int kMaxMatches = 500;
+    for (int count = 0; count < kMaxMatches; ++count) {
+        if (!p->search(needle, r, dir, poppler::case_insensitive, poppler::rotate_0)) {
+            break;
+        }
+        dir = poppler::page::search_next_result;
+
+        const double nx = std::clamp((r.left() - pageRect.left()) / pageRect.width(), 0.0, 1.0);
+        const double ny = std::clamp((r.top() - pageRect.top()) / pageRect.height(), 0.0, 1.0);
+        const double nw = std::clamp(r.width() / pageRect.width(), 0.0, 1.0 - nx);
+        const double nh = std::clamp(r.height() / pageRect.height(), 0.0, 1.0 - ny);
+        if (nw > 0.0 && nh > 0.0) {
+            highlights.append(QRectF(nx, ny, nw, nh));
+        }
+    }
+    return highlights;
 }

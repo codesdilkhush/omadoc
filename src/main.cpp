@@ -16,25 +16,19 @@
 #include "translator.h"
 
 int main(int argc, char *argv[]) {
-    // CLI handling for headless agent/script queries
+    bool isInfoCommand = false;
+    QString infoPath;
     for (int i = 1; i < argc; ++i) {
-        QString arg = QString::fromUtf8(argv[i]);
-        if (arg == "info" && i + 1 < argc) {
-            QString path = QString::fromUtf8(argv[i + 1]);
-            DocumentEngine engine;
-            if (engine.load(path)) {
-                QJsonObject obj;
-                obj["pages"] = engine.pageCount();
-                obj["title"] = engine.title();
-                obj["author"] = engine.author();
-                obj["file"] = path;
-                std::cout << QJsonDocument(obj).toJson(QJsonDocument::Compact).toStdString() << std::endl;
-                return 0;
-            } else {
-                std::cerr << "Failed to load document: " << path.toStdString() << std::endl;
-                return 1;
-            }
+        if (QString::fromUtf8(argv[i]) == QLatin1String("info") && i + 1 < argc) {
+            isInfoCommand = true;
+            infoPath = QString::fromUtf8(argv[i + 1]);
+            break;
         }
+    }
+
+    // Ensure QTextDocument/QFontDatabase works cleanly in headless CLI queries
+    if (isInfoCommand && qEnvironmentVariableIsEmpty("QT_QPA_PLATFORM")) {
+        qputenv("QT_QPA_PLATFORM", "offscreen");
     }
 
     QGuiApplication app(argc, argv);
@@ -42,6 +36,23 @@ int main(int argc, char *argv[]) {
     app.setApplicationVersion(QStringLiteral("0.1.0"));
     app.setDesktopFileName(QStringLiteral("omadoc"));
     app.setWindowIcon(QIcon::fromTheme(QStringLiteral("omadoc")));
+
+    // CLI handling for headless agent/script queries (after QGuiApplication init)
+    if (isInfoCommand) {
+        DocumentEngine engine;
+        if (engine.load(infoPath)) {
+            QJsonObject obj;
+            obj["pages"] = engine.pageCount();
+            obj["title"] = engine.title();
+            obj["author"] = engine.author();
+            obj["file"] = infoPath;
+            std::cout << QJsonDocument(obj).toJson(QJsonDocument::Compact).toStdString() << std::endl;
+            return 0;
+        } else {
+            std::cerr << "Failed to load document: " << infoPath.toStdString() << std::endl;
+            return 1;
+        }
+    }
 
     QQuickStyle::setStyle(QStringLiteral("Material"));
 

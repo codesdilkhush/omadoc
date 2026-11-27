@@ -8,13 +8,14 @@
 #include <QMutex>
 
 struct EpubPageInfo {
-    int spineIndex;
-    int subPage;
-    int totalSubPages;
+    int spineIndex = 0;
+    int subPage = 0;
+    int totalSubPages = 1;
     QString chapterTitle;
     QString imageHref;
     QString href;
-    QByteArray htmlContent;
+    QString htmlText;
+    QString plainText;
     QSizeF size;
 };
 
@@ -35,8 +36,11 @@ public:
     QString author() const override;
     QVariantList tableOfContents() override;
     QList<int> search(const QString &query) const override;
+    QList<QRectF> searchHighlights(int index, const QString &query) const override;
 
 private:
+    void clearUnlocked();
+
     QString m_filePath;
     QString m_title;
     QString m_author;

@@ -8,6 +8,7 @@
 #include <QImage>
 #include <QSizeF>
 #include <QList>
+#include <QRectF>
 #include <QVariantList>
 #include <memory>
 #include <mutex>
@@ -24,7 +25,7 @@ public:
     bool saveCopy(const QString &targetPath);
 
     bool isLoaded() const;
-    QString filePath() const { return m_filePath; }
+    QString filePath() const;
     int pageCount() const;
     QSizeF pageSize(int index) const;
     QImage renderPage(int index, double dpi = 150.0, bool darkMode = false, int rotation = 0);
@@ -33,6 +34,7 @@ public:
     QString author() const;
     QVariantList tableOfContents();
     QList<int> search(const QString &query) const;
+    QList<QRectF> searchHighlights(int index, const QString &query) const;
 
 signals:
     void documentLoaded();

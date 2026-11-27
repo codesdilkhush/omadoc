@@ -1,4 +1,5 @@
 #include "backend.h"
+#include "archiveutils.h"
 #include "documentengine.h"
 #include "pageimageprovider.h"
 #include "portalfilepicker.h"
@@ -89,8 +90,20 @@ Backend::Backend(DocumentEngine *engine, PageImageProvider *provider, QObject *p
     m_picker = new PortalFilePicker(this);
     connect(m_picker, &PortalFilePicker::fileSelected, this, &Backend::openFile);
     connect(m_picker, &PortalFilePicker::saveTargetSelected, this, [this](const QString &target) {
-        if (m_engine && m_engine->saveCopy(target)) {
+        if (!m_engine) return;
+        const QString oldAnnotPath = annotationFilePath();
+        if (m_engine->saveCopy(target)) {
+            if (!m_annotations.isEmpty() && !oldAnnotPath.isEmpty() && QFile::exists(oldAnnotPath)) {
+                const QString newAnnotPath = annotationFilePathFor(target);
+                if (!newAnnotPath.isEmpty() && newAnnotPath != oldAnnotPath) {
+                    OmadocUtils::safeCopyFile(oldAnnotPath, newAnnotPath);
+                }
+            }
             addRecentFile(target);
+            emit statusMessage(tr("Saved copy to \"%1\"").arg(QFileInfo(target).fileName()));
+        } else {
+            m_lastError = tr("Failed to save copy to \"%1\"").arg(QFileInfo(target).fileName());
+            emit errorOccurred(m_lastError);
         }
     });
     loadRecents();
@@ -194,6 +207,38 @@ void Backend::setHelpVisible(bool visible) {
     }
 }
 
+void Backend::clearError() {
+    if (!m_lastError.isEmpty()) {
+        m_lastError.clear();
+        emit errorOccurred(QString());
+    }
+}
+
+void Backend::clearDocumentState() {
+    if (m_provider) m_provider->clearCache();
+    m_currentPage = 0;
+    m_zoom = 1.0;
+    m_rotation = 0;
+    m_fitMode = 0;
+    m_activeTool = 0;
+    m_tocVisible = false;
+    m_toc.clear();
+    m_annotations.clear();
+    clearSearch();
+    ++m_revision;
+
+    emit documentChanged();
+    emit currentPageChanged();
+    emit zoomChanged();
+    emit rotationChanged();
+    emit fitModeChanged();
+    emit activeToolChanged();
+    emit tocVisibleChanged();
+    emit annotationsChanged();
+    emit tocChanged();
+    emit revisionChanged();
+}
+
 void Backend::openFile(const QString &path) {
     if (!m_engine) return;
 
@@ -202,12 +247,20 @@ void Backend::openFile(const QString &path) {
         cleanPath = QUrl(cleanPath).toLocalFile();
     }
 
+    if (cleanPath.isEmpty() || !QFileInfo::exists(cleanPath)) {
+        m_lastError = tr("File not found: \"%1\"").arg(QFileInfo(cleanPath).fileName());
+        emit errorOccurred(m_lastError);
+        return;
+    }
+
     if (m_engine->load(cleanPath)) {
+        clearError();
         if (m_provider) m_provider->clearCache();
         m_currentPage = 0;
         m_zoom = 1.0;
         m_rotation = 0;
         m_fitMode = 0;
+        m_activeTool = 0;
         m_toc = m_engine->tableOfContents();
         clearSearch();
         ++m_revision;
@@ -220,8 +273,13 @@ void Backend::openFile(const QString &path) {
         emit zoomChanged();
         emit rotationChanged();
         emit fitModeChanged();
+        emit activeToolChanged();
         emit tocChanged();
         emit revisionChanged();
+    } else {
+        clearDocumentState();
+        m_lastError = tr("Could not open \"%1\"").arg(QFileInfo(cleanPath).fileName());
+        emit errorOccurred(m_lastError);
     }
 }
 
@@ -239,31 +297,24 @@ void Backend::openPortal() {
 
 void Backend::saveDocument() {
     if (!hasDocument() || !m_engine) return;
-    m_engine->saveCopy(filePath());
+    if (m_engine->saveCopy(filePath())) {
+        emit statusMessage(tr("Saved \"%1\"").arg(fileName()));
+    } else {
+        m_lastError = tr("Failed to save \"%1\"").arg(fileName());
+        emit errorOccurred(m_lastError);
+    }
 }
 
 void Backend::saveAsDocument() {
     if (!hasDocument() || !m_picker) return;
-    m_picker->saveFile(fileName(), QStringLiteral("Save Document As"));
+    const QString suffix = QFileInfo(filePath()).suffix();
+    m_picker->saveFile(fileName(), QStringLiteral("Save Document As"), suffix);
 }
 
 void Backend::closeDocument() {
     if (m_engine) {
         m_engine->close();
-        if (m_provider) m_provider->clearCache();
-        m_currentPage = 0;
-        m_rotation = 0;
-        m_toc.clear();
-        m_annotations.clear();
-        clearSearch();
-        ++m_revision;
-
-        emit documentChanged();
-        emit currentPageChanged();
-        emit rotationChanged();
-        emit annotationsChanged();
-        emit tocChanged();
-        emit revisionChanged();
+        clearDocumentState();
     }
 }
 
@@ -300,10 +351,10 @@ void Backend::resetZoom() {
 void Backend::fitToWidth(double viewportWidth) {
     const QSizeF ps = pageSize(m_currentPage);
     const double w = (m_rotation == 90 || m_rotation == 270) ? ps.height() : ps.width();
-    if (w > 0.0 && viewportWidth > 64.0) {
-        // Render base DPI is 140 / 72.0
+    if (w > 0.0 && viewportWidth > 68.0) {
+        // Render base DPI is 140 / 72.0; subtract 66px for 64px Flickable padding + 2px paper border
         const double baseWidth = w * (140.0 / 72.0);
-        const double targetZoom = (viewportWidth - 48.0) / baseWidth;
+        const double targetZoom = (viewportWidth - 66.0) / baseWidth;
         setZoom(targetZoom);
         setFitMode(1);
     }
@@ -313,11 +364,11 @@ void Backend::fitToPage(double viewportWidth, double viewportHeight) {
     const QSizeF ps = pageSize(m_currentPage);
     const double w = (m_rotation == 90 || m_rotation == 270) ? ps.height() : ps.width();
     const double h = (m_rotation == 90 || m_rotation == 270) ? ps.width() : ps.height();
-    if (w > 0.0 && h > 0.0 && viewportWidth > 64.0 && viewportHeight > 64.0) {
+    if (w > 0.0 && h > 0.0 && viewportWidth > 68.0 && viewportHeight > 68.0) {
         const double baseWidth = w * (140.0 / 72.0);
         const double baseHeight = h * (140.0 / 72.0);
-        const double zW = (viewportWidth - 48.0) / baseWidth;
-        const double zH = (viewportHeight - 64.0) / baseHeight;
+        const double zW = (viewportWidth - 66.0) / baseWidth;
+        const double zH = (viewportHeight - 66.0) / baseHeight;
         setZoom(std::min(zW, zH));
         setFitMode(2);
     }
@@ -379,13 +430,33 @@ void Backend::clearSearch() {
     emit searchChanged();
 }
 
+QVariantList Backend::searchHighlights(int pageIndex) const {
+    QVariantList list;
+    if (!m_engine || m_searchQuery.trimmed().isEmpty()) {
+        return list;
+    }
+
+    const QList<QRectF> rects = m_engine->searchHighlights(pageIndex, m_searchQuery);
+    for (const QRectF &r : rects) {
+        double rx = 0, ry = 0, rw = 0, rh = 0;
+        unrotatedToRendered(m_rotation, r.x(), r.y(), r.width(), r.height(), rx, ry, rw, rh);
+        QVariantMap map;
+        map[QStringLiteral("x")] = rx;
+        map[QStringLiteral("y")] = ry;
+        map[QStringLiteral("width")] = rw;
+        map[QStringLiteral("height")] = rh;
+        list.append(map);
+    }
+    return list;
+}
+
 QString Backend::pageImageUrl(int pageIndex, double dpi, int rot, int dark) const {
     const int effectiveRot = (rot >= 0) ? rot : m_rotation;
     const bool effectiveDark = (dark >= 0) ? (dark != 0) : m_darkMode;
     const QString darkFlag = effectiveDark ? QStringLiteral("1") : QStringLiteral("0");
     return QStringLiteral("image://doc/%1_%2_%3_%4_%5")
         .arg(pageIndex)
-        .arg(static_cast<int>(dpi))
+        .arg(static_cast<int>(std::round(dpi)))
         .arg(darkFlag)
         .arg(effectiveRot)
         .arg(m_revision);
@@ -454,6 +525,7 @@ QVariantList Backend::pageAnnotations(int pageIndex) const {
 }
 
 void Backend::addHighlight(int page, double x, double y, double width, double height, const QString &color) {
+    if (!hasDocument() || page < 0 || page >= pageCount()) return;
     if (std::abs(width) <= 0.0001 || std::abs(height) <= 0.0001) return;
 
     double rx = (width < 0) ? x + width : x;
@@ -482,51 +554,6 @@ void Backend::addHighlight(int page, double x, double y, double width, double he
     m_annotations.append(map);
     saveAnnotations();
     emit annotationsChanged();
-}
-
-QString Backend::addStickyNote(int page, double x, double y, const QString &content, const QString &color) {
-    double ux = 0, uy = 0, uw = 0, uh = 0;
-    renderedToUnrotated(m_rotation, x, y, 0.0, 0.0, ux, uy, uw, uh);
-
-    const QString id = QStringLiteral("sn_%1_%2")
-        .arg(QDateTime::currentMSecsSinceEpoch())
-        .arg(QRandomGenerator::global()->bounded(1000, 9999));
-
-    QVariantMap map;
-    map[QStringLiteral("id")] = id;
-    map[QStringLiteral("type")] = QStringLiteral("sticky");
-    map[QStringLiteral("page")] = page;
-    map[QStringLiteral("ux")] = ux;
-    map[QStringLiteral("uy")] = uy;
-    map[QStringLiteral("uw")] = 0.0;
-    map[QStringLiteral("uh")] = 0.0;
-    map[QStringLiteral("content")] = content;
-    map[QStringLiteral("color")] = color.isEmpty() ? QStringLiteral("#ffd54f") : color;
-    map[QStringLiteral("created")] = QDateTime::currentDateTime().toString(Qt::ISODate);
-    map[QStringLiteral("modified")] = QDateTime::currentDateTime().toString(Qt::ISODate);
-
-    m_annotations.append(map);
-    saveAnnotations();
-    emit annotationsChanged();
-    return id;
-}
-
-void Backend::updateStickyNote(const QString &id, const QString &content) {
-    bool updated = false;
-    for (int i = 0; i < m_annotations.size(); ++i) {
-        QVariantMap map = m_annotations.at(i).toMap();
-        if (map.value(QStringLiteral("id")).toString() == id) {
-            map[QStringLiteral("content")] = content;
-            map[QStringLiteral("modified")] = QDateTime::currentDateTime().toString(Qt::ISODate);
-            m_annotations[i] = map;
-            updated = true;
-            break;
-        }
-    }
-    if (updated) {
-        saveAnnotations();
-        emit annotationsChanged();
-    }
 }
 
 void Backend::deleteAnnotation(const QString &id) {
@@ -580,7 +607,10 @@ void Backend::loadAnnotations() {
             const QJsonArray arr = doc.array();
             for (const QJsonValue &val : arr) {
                 if (val.isObject()) {
-                    m_annotations.append(val.toObject().toVariantMap());
+                    const QJsonObject obj = val.toObject();
+                    if (obj.value(QStringLiteral("type")).toString() != QStringLiteral("sticky")) {
+                        m_annotations.append(obj.toVariantMap());
+                    }
                 }
             }
         }
@@ -603,10 +633,13 @@ void Backend::saveAnnotations() {
 }
 
 QString Backend::annotationFilePath() const {
-    const QString path = filePath();
-    if (path.isEmpty()) return QString();
-    const QString canonical = QFileInfo(path).canonicalFilePath();
-    const QString targetPath = canonical.isEmpty() ? path : canonical;
+    return annotationFilePathFor(filePath());
+}
+
+QString Backend::annotationFilePathFor(const QString &docPath) const {
+    if (docPath.isEmpty()) return QString();
+    const QString canonical = QFileInfo(docPath).canonicalFilePath();
+    const QString targetPath = canonical.isEmpty() ? docPath : canonical;
     const QString hash = QString::fromUtf8(QCryptographicHash::hash(targetPath.toUtf8(), QCryptographicHash::Sha256).toHex());
     const QString dir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QStringLiteral("/omadoc/annotations");
     QDir().mkpath(dir);

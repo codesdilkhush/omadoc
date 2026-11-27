@@ -26,6 +26,7 @@ public:
     QString author() const override;
     QVariantList tableOfContents() override;
     QList<int> search(const QString &query) const override;
+    QList<QRectF> searchHighlights(int index, const QString &query) const override;
 
 private:
     QString m_filePath;

@@ -13,7 +13,8 @@ public:
 
     Q_INVOKABLE void openFile(const QString &title = QStringLiteral("Open Document"));
     Q_INVOKABLE void saveFile(const QString &suggestedName = QStringLiteral("document.pdf"),
-                              const QString &title = QStringLiteral("Save Document"));
+                              const QString &title = QStringLiteral("Save Document"),
+                              const QString &defaultSuffix = QString());
 
 signals:
     void fileSelected(const QString &filePath);
@@ -23,6 +24,14 @@ signals:
 private slots:
     void onResponse(uint response, const QVariantMap &results);
     void onSaveResponse(uint response, const QVariantMap &results);
+
+private:
+    QString predictedRequestPath(const QString &token) const;
+    void disconnectRequestPath(QString &path, const char *slot);
+
+    QString m_defaultSaveSuffix;
+    QString m_openRequestPath;
+    QString m_saveRequestPath;
 };
 
 #endif

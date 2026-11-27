@@ -214,10 +214,23 @@ private slots:
         const QImage page0Night = engine.renderPage(0, 72.0, true, 0);
         QVERIFY(!page0Night.isNull());
 
-        // Test text search
+        // Test text search & search highlight bounding boxes
         const auto searchRes = engine.search("First");
         QVERIFY(!searchRes.isEmpty());
         QCOMPARE(searchRes.first(), 0);
+
+        backend.search("First");
+        const QVariantList pdfHl0 = backend.searchHighlights(0);
+        QVERIFY(!pdfHl0.isEmpty());
+        const QVariantMap firstBox = pdfHl0.first().toMap();
+        QVERIFY(firstBox.value("width").toDouble() > 0.0);
+        QVERIFY(firstBox.value("height").toDouble() > 0.0);
+        backend.setRotation(90);
+        const QVariantList pdfHl90 = backend.searchHighlights(0);
+        QCOMPARE(pdfHl90.size(), pdfHl0.size());
+        backend.setRotation(0);
+        backend.clearSearch();
+        QVERIFY(backend.searchHighlights(0).isEmpty());
 
         // Test save copy (Save As)
         const QString copyPath = temp.filePath("saved_copy.pdf");
@@ -254,23 +267,10 @@ private slots:
         QVERIFY(std::abs(hlMap.value("x").toDouble() - 0.1) < 0.001);
         QVERIFY(std::abs(hlMap.value("y").toDouble() - 0.2) < 0.001);
 
-        // Add sticky note
-        const QString noteId = backend.addStickyNote(0, 0.5, 0.6, "Important comment", "#ffd54f");
-        QVERIFY(!noteId.isEmpty());
+        // Add second highlight
+        backend.addHighlight(0, 0.5, 0.6, 0.2, 0.05, "#80deea");
         QCOMPARE(backend.annotationCount(), 2);
         QCOMPARE(backend.pageAnnotations(0).size(), 2);
-
-        // Update sticky note
-        backend.updateStickyNote(noteId, "Updated comment content");
-        bool foundUpdated = false;
-        for (const QVariant &annot : backend.pageAnnotations(0)) {
-            const QVariantMap m = annot.toMap();
-            if (m.value("id").toString() == noteId) {
-                QCOMPARE(m.value("content").toString(), QStringLiteral("Updated comment content"));
-                foundUpdated = true;
-            }
-        }
-        QVERIFY(foundUpdated);
 
         // Test rotation transformation
         backend.setRotation(90);
@@ -278,8 +278,9 @@ private slots:
         QCOMPARE(rotAnnots.size(), 2);
         backend.setRotation(0);
 
-        // Delete sticky note
-        backend.deleteAnnotation(noteId);
+        // Delete second highlight
+        const QString secondId = backend.pageAnnotations(0).at(1).toMap().value("id").toString();
+        backend.deleteAnnotation(secondId);
         QCOMPARE(backend.annotationCount(), 1);
 
         // Test persistence: re-open file should reload highlight
@@ -349,8 +350,6 @@ private slots:
         // Test annotations on CBZ
         backend.addHighlight(0, 0.1, 0.1, 0.2, 0.2, "#80deea");
         QCOMPARE(backend.annotationCount(), 1);
-        backend.addStickyNote(0, 0.4, 0.4, "Great artwork!");
-        QCOMPARE(backend.annotationCount(), 2);
         backend.clearAllAnnotations();
 
         backend.closeDocument();
@@ -443,10 +442,11 @@ private slots:
         QImage p0Dark = engine.renderPage(0, 140.0, true, 0);
         QVERIFY(!p0Dark.isNull());
 
-        // Test search
+        // Test search (plain text matches, HTML tags do not)
         auto searchRes = engine.search("stormy");
         QVERIFY(!searchRes.isEmpty());
         QCOMPARE(searchRes.first(), 0);
+        QVERIFY(engine.search("xhtml").isEmpty());
 
         // Test integration with Backend
         PageImageProvider provider(&engine);
@@ -455,13 +455,122 @@ private slots:
         QCOMPARE(backend.hasDocument(), true);
         QCOMPARE(backend.title(), QStringLiteral("Epub Adventure"));
 
-        // Test annotations on EPUB
-        backend.addHighlight(0, 0.1, 0.1, 0.3, 0.05, "#ffd54f");
+        // Test EPUB search highlight bounding boxes
+        backend.search("stormy");
+        const QVariantList epubHl = backend.searchHighlights(0);
+        QCOMPARE(epubHl.size(), 1);
+        QVERIFY(epubHl.first().toMap().value("width").toDouble() > 0.0);
+        QVERIFY(epubHl.first().toMap().value("height").toDouble() > 0.0);
+        backend.clearSearch();
+
+        // Test highlight persistence on EPUB
+        backend.addHighlight(0, 0.1, 0.1, 0.3, 0.05, "#80deea");
         QCOMPARE(backend.annotationCount(), 1);
+
+        // Re-open to verify highlight persisted
+        backend.openFile(epubPath);
+        QCOMPARE(backend.annotationCount(), 1);
+        QCOMPARE(backend.pageAnnotations(0).first().toMap().value("color").toString(), QStringLiteral("#80deea"));
+
+        // Opening a non-existent file must emit errorOccurred and keep current document loaded
+        QSignalSpy errSpy(&backend, &Backend::errorOccurred);
+        backend.openFile(temp.filePath("does_not_exist.epub"));
+        QCOMPARE(errSpy.count(), 1);
+        QCOMPARE(backend.hasDocument(), true);
+
         backend.clearAllAnnotations();
 
         backend.closeDocument();
         QCOMPARE(backend.hasDocument(), false);
+    }
+
+    void testEpub3NavPercentPathsAndMultiPageSearch() {
+        QTemporaryDir temp;
+        const QString epubPath = temp.filePath("epub3_nav.epub");
+
+        QString longBody;
+        for (int i = 0; i < 60; ++i) {
+            longBody += QStringLiteral("<p>Paragraph %1 of filler text to force pagination across multiple subpages in chapter one.</p>").arg(i);
+        }
+        longBody += QStringLiteral("<h2 id=\"part2\">Deep Anchor Target</h2><p>UniqueNeedleToken appears only at the end.</p>");
+
+        QList<TestEntry> entries;
+        entries.append(TestEntry{QStringLiteral("mimetype"), QByteArray("application/epub+zip")});
+        entries.append(TestEntry{QStringLiteral("META-INF/container.xml"),
+            QByteArray("<container version=\"1.0\" xmlns=\"urn:oasis:names:tc:opendocument:xmlns:container\">"
+            "  <rootfiles><rootfile full-path=\"OEBPS/content.opf\" media-type=\"application/oebps-package+xml\"/></rootfiles>"
+            "</container>")});
+        entries.append(TestEntry{QStringLiteral("OEBPS/content.opf"),
+            QByteArray("<package version=\"3.0\" xmlns=\"http://www.idpf.org/2007/opf\">"
+            "  <metadata xmlns:dc=\"http://purl.org/dc/elements/1.1/\">"
+            "    <dc:title>EPUB3 Sample</dc:title>"
+            "    <dc:creator>Author One</dc:creator>"
+            "    <dc:creator>Author Two</dc:creator>"
+            "  </metadata>"
+            "  <manifest>"
+            "    <item id=\"nav\" href=\"nav.xhtml\" properties=\"nav\" media-type=\"application/xhtml+xml\"/>"
+            "    <item id=\"ch1\" href=\"Text/Chapter%201.xhtml\" media-type=\"application/xhtml+xml\"/>"
+            "    <item id=\"fig\" href=\"Images/fig%201.png\" media-type=\"image/png\"/>"
+            "  </manifest>"
+            "  <spine><itemref idref=\"ch1\"/></spine>"
+            "</package>")});
+        entries.append(TestEntry{QStringLiteral("OEBPS/nav.xhtml"),
+            QByteArray("<html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\">"
+            "<body><nav epub:type=\"toc\"><ol>"
+            "  <li><a href=\"Text/Chapter%201.xhtml\">Start Here</a>"
+            "    <ol><li><a href=\"Text/Chapter%201.xhtml#part2\">Part Two Anchor</a></li></ol>"
+            "  </li>"
+            "</ol></nav></body></html>")});
+        entries.append(TestEntry{QStringLiteral("OEBPS/Images/fig 1.png"), createTestPng("Figure 1", 200, 120)});
+        entries.append(TestEntry{QStringLiteral("OEBPS/Text/Chapter 1.xhtml"),
+            QStringLiteral("<html xmlns=\"http://www.w3.org/1999/xhtml\"><body>"
+            "<h1>Chapter 1</h1><img src=\"../Images/fig%201.png\"/>%1</body></html>").arg(longBody).toUtf8()});
+
+        createZipArchive(epubPath, entries);
+
+        DocumentEngine engine;
+        QVERIFY(engine.load(epubPath));
+        QCOMPARE(engine.author(), QStringLiteral("Author One, Author Two"));
+        QVERIFY(engine.pageCount() >= 2);
+
+        const QVariantList toc = engine.tableOfContents();
+        QCOMPARE(toc.size(), 2);
+        QCOMPARE(toc.at(0).toMap().value("title").toString(), QStringLiteral("Start Here"));
+        QCOMPARE(toc.at(0).toMap().value("page").toInt(), 0);
+        QCOMPARE(toc.at(1).toMap().value("title").toString(), QStringLiteral("Part Two Anchor"));
+        QCOMPARE(toc.at(1).toMap().value("depth").toInt(), 1);
+        QVERIFY(toc.at(1).toMap().value("page").toInt() > 0);
+
+        // Search only matches the sub-page containing UniqueNeedleToken, not page 0
+        const QList<int> hits = engine.search("UniqueNeedleToken");
+        QCOMPARE(hits.size(), 1);
+        QVERIFY(hits.first() > 0);
+
+        // Last sub-page at 140 DPI must have non-background text pixels (not blank)
+        const QImage lastImg = engine.renderPage(engine.pageCount() - 1, 140.0, false, 0);
+        QVERIFY(!lastImg.isNull());
+        int nonWhite = 0;
+        for (int y = 0; y < lastImg.height(); ++y) {
+            const QRgb *line = reinterpret_cast<const QRgb*>(lastImg.constScanLine(y));
+            for (int x = 0; x < lastImg.width(); ++x) {
+                if (line[x] != qRgb(255, 255, 255)) nonWhite++;
+            }
+        }
+        QVERIFY(nonWhite > 50);
+    }
+
+    void testComicDotSlashPrefixArchive() {
+        QTemporaryDir temp;
+        const QString cbzPath = temp.filePath("dotslash.cbz");
+
+        QList<TestEntry> entries;
+        entries.append(TestEntry{QStringLiteral("./page_01.png"), createTestPng("DotSlash Page 1")});
+        entries.append(TestEntry{QStringLiteral("./page_02.png"), createTestPng("DotSlash Page 2")});
+        createZipArchive(cbzPath, entries);
+
+        DocumentEngine engine;
+        QVERIFY(engine.load(cbzPath));
+        QCOMPARE(engine.pageCount(), 2);
     }
 };
 

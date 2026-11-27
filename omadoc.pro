@@ -6,6 +6,7 @@ TARGET = omadoc
 TEMPLATE = app
 
 HEADERS += \
+    src/archiveutils.h \
     src/backend.h \
     src/documentbackend.h \
     src/pdfbackend.h \

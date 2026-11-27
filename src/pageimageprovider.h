@@ -4,6 +4,8 @@
 #include <QQuickImageProvider>
 #include <QCache>
 #include <QMutex>
+#include <atomic>
+#include <cstdint>
 
 class DocumentEngine;
 
@@ -18,6 +20,7 @@ private:
     DocumentEngine *m_engine;
     QCache<QString, QImage> m_cache;
     QMutex m_mutex;
+    std::atomic<uint64_t> m_generation{0};
 };
 
 #endif

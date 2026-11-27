@@ -8,7 +8,6 @@ Item {
     property string tooltipText: ""
     property bool highlighted: false
     property bool active: false
-    property bool enabled: true
     property int iconSize: 16
     property int customRadius: Math.max(6, theme.radius)
 
@@ -56,7 +55,7 @@ Item {
                 text: root.text
                 visible: text.length > 0
                 font.pixelSize: 12
-                font.weight: Font.SemiBold
+                font.weight: Font.DemiBold
                 color: root.highlighted ? theme.accentForeground : "#f3f4f6"
                 anchors.verticalCenter: parent.verticalCenter
             }
